@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
-import type { Finding } from '../../../shared/types'
+import { ref, computed, watch, nextTick } from 'vue';
+import type { Finding } from '../../../shared/types';
 import {
   store,
   findingState,
@@ -10,9 +10,9 @@ import {
   resetChat,
   update,
   selectNextAfter,
-} from '../store'
-import { t } from '../i18n'
-import Markdown from './Markdown.vue'
+} from '../store';
+import { t } from '../i18n';
+import Markdown from './Markdown.vue';
 import {
   MessageSquare,
   Eraser,
@@ -27,110 +27,110 @@ import {
   ExternalLink,
   PenLine,
   CircleAlert,
-} from 'lucide-vue-next'
+} from 'lucide-vue-next';
 
-const props = defineProps<{ finding: Finding }>()
+const props = defineProps<{ finding: Finding }>();
 
-const id = computed(() => props.finding.id)
-const st = computed(() => findingState(id.value))
-const pending = computed(() => store.pending[id.value])
-const canChat = computed(() => store.run?.capabilities.chat)
+const id = computed(() => props.finding.id);
+const st = computed(() => findingState(id.value));
+const pending = computed(() => store.pending[id.value]);
+const canChat = computed(() => store.run?.capabilities.chat);
 
-const input = ref('')
-const draft = ref('')
-const rejecting = ref(false)
-const reason = ref('')
-const learn = ref(true)
-const log = ref<HTMLElement | null>(null)
-const commentBox = ref<HTMLTextAreaElement | null>(null)
+const input = ref('');
+const draft = ref('');
+const rejecting = ref(false);
+const reason = ref('');
+const learn = ref(true);
+const log = ref<HTMLElement | null>(null);
+const commentBox = ref<HTMLTextAreaElement | null>(null);
 
-const drafts = new Map<string, string>()
+const drafts = new Map<string, string>();
 
 watch(
   id,
   (n, o) => {
-    if (o) drafts.set(o, input.value)
-    input.value = drafts.get(n) || ''
-    draft.value = st.value.comment || ''
-    rejecting.value = false
-    reason.value = st.value.rejectReason || ''
-    scrollDown()
+    if (o) drafts.set(o, input.value);
+    input.value = drafts.get(n) || '';
+    draft.value = st.value.comment || '';
+    rejecting.value = false;
+    reason.value = st.value.rejectReason || '';
+    scrollDown();
   },
   { immediate: true },
-)
+);
 
 // Server-side comment changes (generation) flow into the editor.
 watch(
   () => st.value.comment,
   (c) => {
-    if (c !== undefined && c !== draft.value) draft.value = c
+    if (c !== undefined && c !== draft.value) draft.value = c;
   },
-)
+);
 
 watch(
   () => [st.value.messages.length, pending.value?.text],
   () => scrollDown(),
-)
+);
 
 function scrollDown() {
   nextTick(() => {
-    if (log.value) log.value.scrollTop = log.value.scrollHeight
-  })
+    if (log.value) log.value.scrollTop = log.value.scrollHeight;
+  });
 }
 
 function send() {
-  const m = input.value.trim()
-  if (!m || pending.value) return
-  input.value = ''
-  drafts.delete(id.value)
-  sendChat(id.value, m)
+  const m = input.value.trim();
+  if (!m || pending.value) return;
+  input.value = '';
+  drafts.delete(id.value);
+  sendChat(id.value, m);
 }
 
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-    e.preventDefault()
-    send()
+    e.preventDefault();
+    send();
   }
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | undefined
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function saveComment() {
-  clearTimeout(saveTimer)
-  if ((st.value.comment || '') !== draft.value) update(id.value, { comment: draft.value })
+  clearTimeout(saveTimer);
+  if ((st.value.comment || '') !== draft.value) update(id.value, { comment: draft.value });
 }
 function onDraftInput() {
-  clearTimeout(saveTimer)
-  saveTimer = setTimeout(saveComment, 600)
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveComment, 600);
 }
 
 async function accept() {
-  saveComment()
-  const cur = id.value
-  await update(cur, { status: 'accepted', comment: draft.value })
-  selectNextAfter(cur)
+  saveComment();
+  const cur = id.value;
+  await update(cur, { status: 'accepted', comment: draft.value });
+  selectNextAfter(cur);
 }
 
 async function confirmReject() {
-  const cur = id.value
-  await update(cur, { status: 'rejected', rejectReason: reason.value, learn: learn.value && !!reason.value.trim() })
-  rejecting.value = false
-  selectNextAfter(cur)
+  const cur = id.value;
+  await update(cur, { status: 'rejected', rejectReason: reason.value, learn: learn.value && !!reason.value.trim() });
+  rejecting.value = false;
+  selectNextAfter(cur);
 }
 
 async function reopen() {
-  await update(id.value, { status: 'open' })
+  await update(id.value, { status: 'open' });
 }
 
 function startReject() {
-  rejecting.value = true
+  rejecting.value = true;
 }
 
-defineExpose({ accept, startReject, generate: () => generateComment(id.value), focusChat: () => {} })
+defineExpose({ accept, startReject, generate: () => generateComment(id.value), focusChat: () => {} });
 
 const lastWasNoComment = computed(() => {
-  const m = st.value.messages[st.value.messages.length - 1]
-  return m?.kind === 'comment' && !st.value.comment
-})
+  const m = st.value.messages[st.value.messages.length - 1];
+  return m?.kind === 'comment' && !st.value.comment;
+});
 </script>
 
 <template>

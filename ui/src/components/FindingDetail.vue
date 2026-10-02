@@ -1,42 +1,42 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
-import type { Finding } from '../../../shared/types'
-import { api, type FindingContext } from '../api'
-import { store } from '../store'
-import { t } from '../i18n'
-import Markdown from './Markdown.vue'
-import DiffView from './DiffView.vue'
-import { Users, ShieldCheck, ShieldX, ExternalLink, BookOpen, Wrench, Code, TriangleAlert, Tag } from 'lucide-vue-next'
+import { ref, watch, computed } from 'vue';
+import type { Finding } from '../../../shared/types';
+import { api, type FindingContext } from '../api';
+import { store } from '../store';
+import { t } from '../i18n';
+import Markdown from './Markdown.vue';
+import DiffView from './DiffView.vue';
+import { Users, ShieldCheck, ShieldX, ExternalLink, BookOpen, Wrench, Code, TriangleAlert, Tag } from 'lucide-vue-next';
 
-const props = defineProps<{ finding: Finding }>()
-const ctx = ref<FindingContext | null>(null)
-const cache = new Map<string, FindingContext>()
+const props = defineProps<{ finding: Finding }>();
+const ctx = ref<FindingContext | null>(null);
+const cache = new Map<string, FindingContext>();
 
 watch(
   () => props.finding.id,
   async (id) => {
-    ctx.value = cache.get(id) || null
-    if (ctx.value) return
+    ctx.value = cache.get(id) || null;
+    if (ctx.value) return;
     try {
-      const c = await api.context(id)
-      cache.set(id, c)
-      if (props.finding.id === id) ctx.value = c
+      const c = await api.context(id);
+      cache.set(id, c);
+      if (props.finding.id === id) ctx.value = c;
     } catch {
-      ctx.value = { hunks: [], snippet: null }
+      ctx.value = { hunks: [], snippet: null };
     }
   },
   { immediate: true },
-)
+);
 
 const fileLink = computed(() => {
-  const m = store.run?.meta
-  if (!m || m.mode !== 'pr' || !m.owner) return ''
-  const f = props.finding
-  const range = f.endLine ? `L${f.line}-L${f.endLine}` : `L${f.line}`
-  return `https://github.com/${m.owner}/${m.repo}/blob/${m.headSha}/${f.file}#${range}`
-})
+  const m = store.run?.meta;
+  if (!m || m.mode !== 'pr' || !m.owner) return '';
+  const f = props.finding;
+  const range = f.endLine ? `L${f.line}-L${f.endLine}` : `L${f.line}`;
+  return `https://github.com/${m.owner}/${m.repo}/blob/${m.headSha}/${f.file}#${range}`;
+});
 
-const v = computed(() => props.finding.validation)
+const v = computed(() => props.finding.validation);
 </script>
 
 <template>

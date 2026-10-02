@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
-import { api, type ReviewPlan } from '../api'
-import { store } from '../store'
-import { t } from '../i18n'
-import Markdown from './Markdown.vue'
+import { ref, watch, onMounted } from 'vue';
+import { api, type ReviewPlan } from '../api';
+import { store } from '../store';
+import { t } from '../i18n';
+import Markdown from './Markdown.vue';
 import {
   X,
   CircleCheck,
@@ -15,59 +15,59 @@ import {
   Info,
   MessageSquareText,
   FileText,
-} from 'lucide-vue-next'
+} from 'lucide-vue-next';
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [] }>();
 
-const event = ref('COMMENT')
-const summary = ref('')
-const allGeneral = ref(false)
-const plan = ref<ReviewPlan | null>(null)
-const busy = ref(false)
-const error = ref('')
-const done = ref<{ url?: string; count: number } | null>(null)
-const copied = ref(false)
+const event = ref('COMMENT');
+const summary = ref('');
+const allGeneral = ref(false);
+const plan = ref<ReviewPlan | null>(null);
+const busy = ref(false);
+const error = ref('');
+const done = ref<{ url?: string; count: number } | null>(null);
+const copied = ref(false);
 
-const isPr = store.run?.meta.mode === 'pr'
-const canPublish = store.run?.capabilities.publish
+const isPr = store.run?.meta.mode === 'pr';
+const canPublish = store.run?.capabilities.publish;
 
-let timer: ReturnType<typeof setTimeout> | undefined
+let timer: ReturnType<typeof setTimeout> | undefined;
 async function refresh() {
   try {
-    plan.value = await api.preview({ event: event.value, summary: summary.value, allGeneral: allGeneral.value })
+    plan.value = await api.preview({ event: event.value, summary: summary.value, allGeneral: allGeneral.value });
   } catch (e) {
-    error.value = (e as Error).message
+    error.value = (e as Error).message;
   }
 }
-watch([event, allGeneral], refresh)
+watch([event, allGeneral], refresh);
 watch(summary, () => {
-  clearTimeout(timer)
-  timer = setTimeout(refresh, 400)
-})
-onMounted(refresh)
+  clearTimeout(timer);
+  timer = setTimeout(refresh, 400);
+});
+onMounted(refresh);
 
 async function publish() {
-  busy.value = true
-  error.value = ''
+  busy.value = true;
+  error.value = '';
   try {
-    const r = await api.publish({ event: event.value, summary: summary.value, allGeneral: allGeneral.value })
-    if (store.run) store.run.state = r.state
-    done.value = { url: r.url, count: r.count }
+    const r = await api.publish({ event: event.value, summary: summary.value, allGeneral: allGeneral.value });
+    if (store.run) store.run.state = r.state;
+    done.value = { url: r.url, count: r.count };
   } catch (e) {
-    error.value = (e as Error).message
+    error.value = (e as Error).message;
   } finally {
-    busy.value = false
+    busy.value = false;
   }
 }
 
 async function copyMd() {
-  const md = await api.exportMd()
-  await navigator.clipboard.writeText(md)
-  copied.value = true
-  setTimeout(() => (copied.value = false), 1500)
+  const md = await api.exportMd();
+  await navigator.clipboard.writeText(md);
+  copied.value = true;
+  setTimeout(() => (copied.value = false), 1500);
 }
 
-const nothing = () => !plan.value || (!plan.value.ids.length && !summary.value.trim() && event.value === 'COMMENT')
+const nothing = () => !plan.value || (!plan.value.ids.length && !summary.value.trim() && event.value === 'COMMENT');
 </script>
 
 <template>

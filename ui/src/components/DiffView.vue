@@ -1,38 +1,38 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { FindingContext } from '../api'
+import { computed } from 'vue';
+import type { FindingContext } from '../api';
 
-const props = defineProps<{ ctx: FindingContext | null; line: number; endLine?: number }>()
+const props = defineProps<{ ctx: FindingContext | null; line: number; endLine?: number }>();
 
-const from = computed(() => props.line)
-const to = computed(() => props.endLine || props.line)
-const hit = (n?: number) => n !== undefined && n >= from.value && n <= to.value
+const from = computed(() => props.line);
+const to = computed(() => props.endLine || props.line);
+const hit = (n?: number) => n !== undefined && n >= from.value && n <= to.value;
 
 interface Row {
-  type: 'add' | 'del' | 'ctx' | 'hunk'
-  old?: number
-  new?: number
-  text: string
+  type: 'add' | 'del' | 'ctx' | 'hunk';
+  old?: number;
+  new?: number;
+  text: string;
 }
 
 const rows = computed<Row[]>(() => {
-  const c = props.ctx
-  if (!c) return []
+  const c = props.ctx;
+  if (!c) return [];
   if (c.hunks.length) {
-    const out: Row[] = []
+    const out: Row[] = [];
     for (const h of c.hunks) {
-      out.push({ type: 'hunk', text: h.header })
+      out.push({ type: 'hunk', text: h.header });
       // Trim very long hunks to a window around the finding.
-      const idx = h.lines.findIndex((l) => l.new !== undefined && l.new >= from.value - 12)
-      const start = h.lines.length > 80 && idx > 0 ? idx : 0
-      const slice = h.lines.slice(start, h.lines.length > 80 ? start + 60 : undefined)
-      for (const l of slice) out.push({ type: l.type, old: l.old, new: l.new, text: l.text })
+      const idx = h.lines.findIndex((l) => l.new !== undefined && l.new >= from.value - 12);
+      const start = h.lines.length > 80 && idx > 0 ? idx : 0;
+      const slice = h.lines.slice(start, h.lines.length > 80 ? start + 60 : undefined);
+      for (const l of slice) out.push({ type: l.type, old: l.old, new: l.new, text: l.text });
     }
-    return out
+    return out;
   }
-  if (c.snippet) return c.snippet.lines.map((text, i) => ({ type: 'ctx' as const, new: c.snippet!.start + i, text }))
-  return []
-})
+  if (c.snippet) return c.snippet.lines.map((text, i) => ({ type: 'ctx' as const, new: c.snippet!.start + i, text }));
+  return [];
+});
 </script>
 
 <template>

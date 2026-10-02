@@ -4,3 +4,4 @@ ui/dist/
 .sieve/settings.local.json
 .DS_Store
 *.log
+.vscode/settings.json

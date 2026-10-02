@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed } from 'vue';
 
 const en = {
   open: 'Open',
@@ -64,7 +64,7 @@ const en = {
   finish: 'Finish',
   finishConfirm: 'Stop the Sieve server? Unpublished work is already saved.',
   stopped: 'Server stopped. You can close this tab.',
-}
+};
 
 const ru: typeof en = {
   open: 'Открытые',
@@ -130,10 +130,10 @@ const ru: typeof en = {
   finish: 'Завершить',
   finishConfirm: 'Остановить сервер Sieve? Всё неопубликованное уже сохранено.',
   stopped: 'Сервер остановлен. Вкладку можно закрыть.',
-}
+};
 
-export type Strings = typeof en
-const dict: Record<string, Strings> = { en, ru }
+export type Strings = typeof en;
+const dict: Record<string, Strings> = { en, ru };
 
-export const uiLang = ref('en')
-export const t = computed<Strings>(() => dict[uiLang.value] || en)
+export const uiLang = ref('en');
+export const t = computed<Strings>(() => dict[uiLang.value] || en);

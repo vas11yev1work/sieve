@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { store, visible, findingState } from '../store'
-import { t } from '../i18n'
-import { Check, MessageSquareText, LoaderCircle, Inbox } from 'lucide-vue-next'
+import { store, visible, findingState } from '../store';
+import { t } from '../i18n';
+import { Check, MessageSquareText, LoaderCircle, Inbox } from 'lucide-vue-next';
 </script>
 
 <template>

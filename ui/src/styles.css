@@ -22,6 +22,15 @@
   --del-fg: #a42626;
   --hl-bg: #fff4c2;
   --code-bg: #f6f6f9;
+  --sh-keyword: #a626a4;
+  --sh-string: #50a14f;
+  --sh-comment: #a0a1a7;
+  --sh-class: #c18401;
+  --sh-entity: #4078f2;
+  --sh-property: #e45649;
+  --sh-jsxliterals: #50a14f;
+  --sh-identifier: var(--text);
+  --sh-sign: var(--muted);
   --shadow: 0 1px 2px rgba(20, 20, 40, 0.06), 0 4px 16px rgba(20, 20, 40, 0.06);
   --radius: 10px;
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
@@ -53,6 +62,15 @@
     --del-fg: #ff9b9b;
     --hl-bg: #3d3514;
     --code-bg: #14141a;
+    --sh-keyword: #c678dd;
+    --sh-string: #98c379;
+    --sh-comment: #7f848e;
+    --sh-class: #e5c07b;
+    --sh-entity: #61afef;
+    --sh-property: #e06c75;
+    --sh-jsxliterals: #98c379;
+    --sh-identifier: var(--text);
+    --sh-sign: var(--muted);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
     color-scheme: dark;
   }

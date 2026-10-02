@@ -1,9 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import type { Settings } from '../../shared/types.ts'
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import type { Settings } from '../../shared/types.ts';
 
-export const SIEVE_HOME = process.env.SIEVE_HOME || join(homedir(), '.sieve')
+export const SIEVE_HOME = process.env.SIEVE_HOME || join(homedir(), '.sieve');
 
 export const DEFAULT_SETTINGS: Settings = {
   reportLanguage: 'en',
@@ -38,46 +38,46 @@ export const DEFAULT_SETTINGS: Settings = {
     '**/*.snap',
     '**/dist/**',
   ],
-}
+};
 
 function readJson(path: string): Record<string, unknown> | null {
-  if (!existsSync(path)) return null
+  if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, 'utf8'))
+    return JSON.parse(readFileSync(path, 'utf8'));
   } catch (e) {
-    throw new Error(`Invalid JSON in ${path}: ${(e as Error).message}`)
+    throw new Error(`Invalid JSON in ${path}: ${(e as Error).message}`, { cause: e });
   }
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object' && !Array.isArray(v)
+  return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
 /** Deep merge: objects merge, arrays and scalars replace. `rulesExtra`/`ignoreExtra` append. */
 function merge<T>(base: T, over: Record<string, unknown>): T {
-  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) }
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
   for (const [k, v] of Object.entries(over)) {
-    if (k === '$schema') continue
+    if (k === '$schema') continue;
     if (k === 'rulesExtra' && Array.isArray(v)) {
-      out.rules = [...((out.rules as string[]) || []), ...v]
+      out.rules = [...((out.rules as string[]) || []), ...v];
     } else if (k === 'ignoreExtra' && Array.isArray(v)) {
-      out.ignore = [...((out.ignore as string[]) || []), ...v]
+      out.ignore = [...((out.ignore as string[]) || []), ...v];
     } else if (isObj(v) && isObj(out[k])) {
-      out[k] = merge(out[k], v)
+      out[k] = merge(out[k], v);
     } else {
-      out[k] = v
+      out[k] = v;
     }
   }
-  return out as T
+  return out as T;
 }
 
 export function settingsFiles(repoRoot?: string): string[] {
-  const files = [join(SIEVE_HOME, 'settings.json')]
+  const files = [join(SIEVE_HOME, 'settings.json')];
   if (repoRoot) {
-    files.push(join(repoRoot, '.sieve', 'settings.json'))
-    files.push(join(repoRoot, '.sieve', 'settings.local.json'))
+    files.push(join(repoRoot, '.sieve', 'settings.json'));
+    files.push(join(repoRoot, '.sieve', 'settings.local.json'));
   }
-  return files
+  return files;
 }
 
 /**
@@ -85,12 +85,12 @@ export function settingsFiles(repoRoot?: string): string[] {
  *   defaults < ~/.sieve/settings.json < <repo>/.sieve/settings.json < <repo>/.sieve/settings.local.json < CLI flags
  */
 export function loadSettings(repoRoot?: string, overrides: Partial<Settings> = {}): Settings {
-  let s: Settings = structuredClone(DEFAULT_SETTINGS)
+  let s: Settings = structuredClone(DEFAULT_SETTINGS);
   for (const f of settingsFiles(repoRoot)) {
-    const j = readJson(f)
-    if (j) s = merge(s, j)
+    const j = readJson(f);
+    if (j) s = merge(s, j);
   }
-  return merge(s, overrides as Record<string, unknown>)
+  return merge(s, overrides as Record<string, unknown>);
 }
 
 const LANG_NAMES: Record<string, string> = {
@@ -109,9 +109,9 @@ const LANG_NAMES: Record<string, string> = {
   zh: 'Chinese',
   ja: 'Japanese',
   ko: 'Korean',
-}
+};
 
 /** "ru" -> "Russian"; anything else is passed through ("Brazilian Portuguese"). */
 export function languageName(lang: string): string {
-  return LANG_NAMES[lang.toLowerCase()] || lang
+  return LANG_NAMES[lang.toLowerCase()] || lang;
 }

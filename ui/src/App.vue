@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { store, load, counts, current, move, setLanguages, findingState, visible, type Tab } from './store'
-import { t } from './i18n'
-import FindingList from './components/FindingList.vue'
-import FindingDetail from './components/FindingDetail.vue'
-import ChatPanel from './components/ChatPanel.vue'
-import PublishDialog from './components/PublishDialog.vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { store, load, counts, current, move, setLanguages, findingState, visible, type Tab } from './store';
+import { t } from './i18n';
+import FindingList from './components/FindingList.vue';
+import FindingDetail from './components/FindingDetail.vue';
+import ChatPanel from './components/ChatPanel.vue';
+import PublishDialog from './components/PublishDialog.vue';
 import {
   Funnel,
   GitBranch,
@@ -19,45 +19,45 @@ import {
   GitPullRequest,
   FileDiff,
   Power,
-} from 'lucide-vue-next'
-import { api } from './api'
+} from 'lucide-vue-next';
+import { api } from './api';
 
-const publishing = ref(false)
-const langOpen = ref(false)
-const reportLang = ref('')
-const commentLang = ref('')
-const persist = ref(false)
-const chat = ref<InstanceType<typeof ChatPanel> | null>(null)
+const publishing = ref(false);
+const langOpen = ref(false);
+const reportLang = ref('');
+const commentLang = ref('');
+const persist = ref(false);
+const chat = ref<InstanceType<typeof ChatPanel> | null>(null);
 
-const LANGS = ['en', 'ru', 'sr', 'uk', 'de', 'fr', 'es', 'it', 'pl', 'pt', 'nl', 'tr', 'zh', 'ja']
+const LANGS = ['en', 'ru', 'sr', 'uk', 'de', 'fr', 'es', 'it', 'pl', 'pt', 'nl', 'tr', 'zh', 'ja'];
 
 const tabs = computed<{ id: Tab; label: string }[]>(() => [
   { id: 'open', label: t.value.open },
   { id: 'accepted', label: t.value.accepted },
   { id: 'rejected', label: t.value.rejected },
   { id: 'filtered', label: t.value.filtered },
-])
+]);
 
 const ready = computed(
   () =>
     (store.run?.findings || []).filter((f) => {
-      const s = findingState(f.id)
-      return s.status === 'accepted' && s.comment && !s.published
+      const s = findingState(f.id);
+      return s.status === 'accepted' && s.comment && !s.published;
     }).length,
-)
+);
 
 watch(
   () => store.tab,
   () => {
-    if (!visible.value.some((f) => f.id === store.selected)) store.selected = visible.value[0]?.id || ''
+    if (!visible.value.some((f) => f.id === store.selected)) store.selected = visible.value[0]?.id || '';
   },
-)
+);
 
 function openLang() {
-  reportLang.value = store.run?.settings.reportLanguage || 'en'
-  commentLang.value = store.run?.settings.commentLanguage || 'en'
-  persist.value = false
-  langOpen.value = !langOpen.value
+  reportLang.value = store.run?.settings.reportLanguage || 'en';
+  commentLang.value = store.run?.settings.commentLanguage || 'en';
+  persist.value = false;
+  langOpen.value = !langOpen.value;
 }
 
 async function applyLang() {
@@ -65,37 +65,37 @@ async function applyLang() {
     reportLanguage: reportLang.value.trim(),
     commentLanguage: commentLang.value.trim(),
     persist: persist.value,
-  })
-  langOpen.value = false
+  });
+  langOpen.value = false;
 }
 
 async function finish() {
-  if (!confirm(t.value.finishConfirm)) return
-  await api.shutdown().catch(() => {})
-  store.error = t.value.stopped
+  if (!confirm(t.value.finishConfirm)) return;
+  await api.shutdown().catch(() => {});
+  store.error = t.value.stopped;
 }
 
 function onKey(e: KeyboardEvent) {
-  const el = e.target as HTMLElement
+  const el = e.target as HTMLElement;
   if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.isContentEditable))
-    return
-  if (e.metaKey || e.ctrlKey || e.altKey || publishing.value) return
+    return;
+  if (e.metaKey || e.ctrlKey || e.altKey || publishing.value) return;
   if (e.key === 'j' || e.key === 'ArrowDown') {
-    move(1)
-    e.preventDefault()
+    move(1);
+    e.preventDefault();
   } else if (e.key === 'k' || e.key === 'ArrowUp') {
-    move(-1)
-    e.preventDefault()
-  } else if (e.key === 'a' && current.value) chat.value?.accept()
-  else if (e.key === 'r' && current.value) chat.value?.startReject()
-  else if (e.key === 'g' && current.value) chat.value?.generate()
+    move(-1);
+    e.preventDefault();
+  } else if (e.key === 'a' && current.value) chat.value?.accept();
+  else if (e.key === 'r' && current.value) chat.value?.startReject();
+  else if (e.key === 'g' && current.value) chat.value?.generate();
 }
 
 onMounted(() => {
-  load()
-  window.addEventListener('keydown', onKey)
-})
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+  load();
+  window.addEventListener('keydown', onKey);
+});
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
 </script>
 
 <template>
