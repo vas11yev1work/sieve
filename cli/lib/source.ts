@@ -3,9 +3,7 @@ import { join, dirname, resolve, isAbsolute } from 'node:path'
 import { sh, run, has } from './sh.ts'
 import { SIEVE_HOME } from './settings.ts'
 
-export type Input =
-  | { kind: 'pr'; owner?: string; repo?: string; number: number }
-  | { kind: 'local'; base?: string }
+export type Input = { kind: 'pr'; owner?: string; repo?: string; number: number } | { kind: 'local'; base?: string }
 
 /** Accepts a PR URL, "owner/repo#123", "#123", "123" or nothing (local diff). */
 export function parseInput(arg: string | undefined, base?: string): Input {
@@ -36,18 +34,25 @@ export function githubRemotes(repoRoot: string): Remote[] {
   if (!r.ok) return []
   const out: Remote[] = []
   for (const line of r.stdout.split('\n')) {
-    const m = line.match(/^(\S+)\s+(?:https?:\/\/(?:[^@/]+@)?github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([^/\s]+)\/([^/\s]+?)(?:\.git)?\s+\(fetch\)/)
+    const m = line.match(
+      /^(\S+)\s+(?:https?:\/\/(?:[^@/]+@)?github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([^/\s]+)\/([^/\s]+?)(?:\.git)?\s+\(fetch\)/,
+    )
     if (m) out.push({ name: m[1]!, owner: m[2]!, repo: m[3]! })
   }
   return out
 }
 
 export function requireGh() {
-  if (!has('gh')) throw new Error('GitHub CLI (gh) is required for PR reviews: https://cli.github.com — then run `gh auth login`.')
+  if (!has('gh'))
+    throw new Error('GitHub CLI (gh) is required for PR reviews: https://cli.github.com — then run `gh auth login`.')
 }
 
 /** Find a local checkout of owner/repo: the current repo if it matches, otherwise a cached clone. */
-export function ensureRepo(cwd: string, owner: string, repo: string): { root: string; remote: string; cloned: boolean } {
+export function ensureRepo(
+  cwd: string,
+  owner: string,
+  repo: string,
+): { root: string; remote: string; cloned: boolean } {
   const here = repoRootOf(cwd)
   if (here) {
     const rem = githubRemotes(here).find(
@@ -94,7 +99,13 @@ export interface PrInfo {
 
 export function fetchPr(owner: string, repo: string, n: number): PrInfo {
   const json = run([
-    'gh', 'pr', 'view', String(n), '-R', `${owner}/${repo}`, '--json',
+    'gh',
+    'pr',
+    'view',
+    String(n),
+    '-R',
+    `${owner}/${repo}`,
+    '--json',
     'number,title,body,url,state,isDraft,author,baseRefName,headRefName,baseRefOid,headRefOid',
   ])
   return JSON.parse(json)
@@ -142,14 +153,26 @@ export function excludeRuns(root: string) {
 export function defaultBase(root: string): string {
   const head = sh(['git', 'symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'], { cwd: root })
   if (head.ok && head.stdout.trim()) return head.stdout.trim()
-  for (const c of ['origin/main', 'origin/master', 'origin/dev', 'origin/develop', 'main', 'master', 'dev', 'develop']) {
+  for (const c of [
+    'origin/main',
+    'origin/master',
+    'origin/dev',
+    'origin/develop',
+    'main',
+    'master',
+    'dev',
+    'develop',
+  ]) {
     if (sh(['git', 'rev-parse', '--verify', '--quiet', c], { cwd: root }).ok) return c
   }
   throw new Error('Could not detect the base branch. Pass it explicitly: --base <branch>')
 }
 
 /** Local diff: everything since the merge-base with `base`, including uncommitted and untracked files. */
-export function localDiff(root: string, base: string): { patch: string; baseSha: string; headSha: string; branch: string } {
+export function localDiff(
+  root: string,
+  base: string,
+): { patch: string; baseSha: string; headSha: string; branch: string } {
   const baseSha = run(['git', 'merge-base', base, 'HEAD'], { cwd: root })
   const headSha = run(['git', 'rev-parse', 'HEAD'], { cwd: root })
   const branch = sh(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root }).stdout.trim() || 'HEAD'

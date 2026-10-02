@@ -70,7 +70,10 @@ export function buildReview(
   }
 }
 
-export function postReview(meta: RunMeta, plan: ReviewPlan): { ok: true; url?: string } | { ok: false; error: string; status?: number } {
+export function postReview(
+  meta: RunMeta,
+  plan: ReviewPlan,
+): { ok: true; url?: string } | { ok: false; error: string; status?: number } {
   if (!plan.payload.comments.length && !plan.payload.body && plan.payload.event === 'COMMENT') {
     return { ok: false, error: 'Nothing to publish.' }
   }
@@ -82,7 +85,9 @@ export function postReview(meta: RunMeta, plan: ReviewPlan): { ok: true; url?: s
     let msg = r.stderr.trim() || r.stdout.trim()
     try {
       const j = JSON.parse(r.stdout)
-      msg = [j.message, ...(j.errors || []).map((e: unknown) => (typeof e === 'string' ? e : JSON.stringify(e)))].join(' — ')
+      msg = [j.message, ...(j.errors || []).map((e: unknown) => (typeof e === 'string' ? e : JSON.stringify(e)))].join(
+        ' — ',
+      )
     } catch {}
     const status = Number((r.stderr.match(/HTTP (\d{3})/) || [])[1]) || undefined
     return { ok: false, error: msg, status }
@@ -100,7 +105,12 @@ export function exportMarkdown(meta: RunMeta, findings: Finding[], state: RunSta
   const items = findings.filter((f) => state.findings[f.id]?.status === 'accepted' && state.findings[f.id]?.comment)
   const lines = [`# ${meta.title}`, '']
   for (const f of items) {
-    lines.push(`### \`${f.file}:${f.line}${f.endLine ? `-${f.endLine}` : ''}\``, '', state.findings[f.id]!.comment!.trim(), '')
+    lines.push(
+      `### \`${f.file}:${f.line}${f.endLine ? `-${f.endLine}` : ''}\``,
+      '',
+      state.findings[f.id]!.comment!.trim(),
+      '',
+    )
   }
   return lines.join('\n')
 }

@@ -44,7 +44,12 @@ export function ensureUi(sieveRoot: string) {
 }
 
 function openBrowser(url: string) {
-  const cmd = process.platform === 'darwin' ? ['open', url] : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] : ['xdg-open', url]
+  const cmd =
+    process.platform === 'darwin'
+      ? ['open', url]
+      : process.platform === 'win32'
+        ? ['cmd', '/c', 'start', '', url]
+        : ['xdg-open', url]
   try {
     Bun.spawn(cmd, { stdout: 'ignore', stderr: 'ignore' })
   } catch {}
@@ -89,7 +94,8 @@ export function createApp(o: ServerOptions) {
 
   function findingContext(f: Finding): string {
     const s = settings()
-    const { id, file, line, endLine, severity, category, rule, title, explanation, suggestion, reviewers, validation } = f
+    const { id, file, line, endLine, severity, category, rule, title, explanation, suggestion, reviewers, validation } =
+      f
     return [
       'You are helping a developer triage ONE finding from an automated multi-agent code review (Sieve).',
       'Act as a sharp, honest senior colleague: verify claims against the actual code, say plainly when the finding is wrong,',
@@ -104,7 +110,11 @@ export function createApp(o: ServerOptions) {
       '',
       'The finding:',
       '```json',
-      JSON.stringify({ id, file, line, endLine, severity, category, rule, title, explanation, suggestion, reviewers, validation }, null, 2),
+      JSON.stringify(
+        { id, file, line, endLine, severity, category, rule, title, explanation, suggestion, reviewers, validation },
+        null,
+        2,
+      ),
       '```',
       '',
       `Chat with the developer in ${languageName(s.reportLanguage)}. PR comments you are asked to write use their own language.`,
@@ -155,7 +165,10 @@ export function createApp(o: ServerOptions) {
       const a = f.anchor.startLine || f.anchor.line
       const b = f.anchor.line
       if (existsSync(file)) {
-        const cur = readFileSync(file, 'utf8').split('\n').slice(a - 1, b).join('\n')
+        const cur = readFileSync(file, 'utf8')
+          .split('\n')
+          .slice(a - 1, b)
+          .join('\n')
         sugg =
           `If a small change to lines ${a}-${b} fully fixes the problem on its own, include a GitHub \`\`\`suggestion block ` +
           `with the complete replacement for exactly those lines. Otherwise (bigger change, several places, follow-up needed) ` +
@@ -236,8 +249,13 @@ export function createApp(o: ServerOptions) {
     if (body.status === 'rejected' && body.learn && body.rejectReason?.trim()) {
       const file = join(meta.repoRoot, '.sieve', 'learned.md')
       mkdirSync(dirname(file), { recursive: true })
-      const head = existsSync(file) ? '' : '# Sieve — rejected findings\n\nFindings the team rejected in past reviews. Reviewers must not raise these again.\n\n'
-      appendFileSync(file, `${head}- [${f.category}] \`${f.file}\` — "${f.title}": ${body.rejectReason.trim().replace(/\n+/g, ' ')}\n`)
+      const head = existsSync(file)
+        ? ''
+        : '# Sieve — rejected findings\n\nFindings the team rejected in past reviews. Reviewers must not raise these again.\n\n'
+      appendFileSync(
+        file,
+        `${head}- [${f.category}] \`${f.file}\` — "${f.title}": ${body.rejectReason.trim().replace(/\n+/g, ' ')}\n`,
+      )
     }
     save()
     return c.json(st)
@@ -292,9 +310,17 @@ export function createApp(o: ServerOptions) {
           if (out.trim() === 'NO_COMMENT') out = ''
           st.comment = out
         }
-        st.messages.push({ role: 'assistant', text: kind === 'comment' ? out || '—' : out, at: new Date().toISOString(), kind })
+        st.messages.push({
+          role: 'assistant',
+          text: kind === 'comment' ? out || '—' : out,
+          at: new Date().toISOString(),
+          kind,
+        })
         save()
-        await stream.writeSSE({ event: 'done', data: JSON.stringify({ state: st, noComment: kind === 'comment' && !out }) })
+        await stream.writeSSE({
+          event: 'done',
+          data: JSON.stringify({ state: st, noComment: kind === 'comment' && !out }),
+        })
       } catch (e) {
         await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: (e as Error).message }) })
       } finally {
@@ -330,6 +356,11 @@ export function createApp(o: ServerOptions) {
 
   app.get('/api/export', (c) => c.text(exportMarkdown(meta, findings, state)))
 
+  app.post('/api/shutdown', (c) => {
+    setTimeout(() => process.exit(0), 100) // let the response flush first
+    return c.json({ ok: true })
+  })
+
   // Static UI
   const dist = join(o.sieveRoot, 'ui', 'dist')
   app.get('*', (c) => {
@@ -338,7 +369,9 @@ export function createApp(o: ServerOptions) {
     let file = join(dist, p)
     if (p === '/' || !existsSync(file) || !extname(file)) file = join(dist, 'index.html')
     if (!existsSync(file)) return c.text('UI is not built. Run `bun run build` in the sieve folder.', 500)
-    return new Response(Bun.file(file), { headers: { 'content-type': MIME[extname(file)] || 'application/octet-stream' } })
+    return new Response(Bun.file(file), {
+      headers: { 'content-type': MIME[extname(file)] || 'application/octet-stream' },
+    })
   })
 
   return app

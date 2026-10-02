@@ -4,7 +4,18 @@ import { api, type ReviewPlan } from '../api'
 import { store } from '../store'
 import { t } from '../i18n'
 import Markdown from './Markdown.vue'
-import { X, CircleCheck, ExternalLink, Copy, ClipboardCheck, Send, LoaderCircle, Info, MessageSquareText, FileText } from 'lucide-vue-next'
+import {
+  X,
+  CircleCheck,
+  ExternalLink,
+  Copy,
+  ClipboardCheck,
+  Send,
+  LoaderCircle,
+  Info,
+  MessageSquareText,
+  FileText,
+} from 'lucide-vue-next'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -71,7 +82,9 @@ const nothing = () => !plan.value || (!plan.value.ids.length && !summary.value.t
         <CircleCheck :size="40" :stroke-width="1.5" class="ok-icon" />
         <div class="big">{{ t.publishedOk }}</div>
         <div class="muted count"><MessageSquareText :size="14" /> {{ done.count }}</div>
-        <a v-if="done.url" class="primary-link" :href="done.url" target="_blank" rel="noopener">{{ t.openOnGithub }} <ExternalLink :size="14" /></a>
+        <a v-if="done.url" class="primary-link" :href="done.url" target="_blank" rel="noopener"
+          >{{ t.openOnGithub }} <ExternalLink :size="14"
+        /></a>
       </div>
 
       <div v-else class="body">
@@ -95,9 +108,7 @@ const nothing = () => !plan.value || (!plan.value.ids.length && !summary.value.t
 
         <div v-if="plan && !plan.ids.length" class="muted">{{ t.nothingToPublish }}</div>
         <div v-else-if="plan" class="preview scroll">
-          <div class="muted counts">
-            {{ plan.inline }} {{ t.inline }} · {{ plan.general }} {{ t.general }}
-          </div>
+          <div class="muted counts">{{ plan.inline }} {{ t.inline }} · {{ plan.general }} {{ t.general }}</div>
           <div v-for="(c, i) in plan.payload.comments" :key="i" class="item">
             <div class="mono loc">{{ c.path }}:{{ c.start_line ? `${c.start_line}–` : '' }}{{ c.line }}</div>
             <Markdown :text="c.body" />
@@ -112,7 +123,9 @@ const nothing = () => !plan.value || (!plan.value.ids.length && !summary.value.t
       </div>
 
       <footer v-if="!done">
-        <button @click="copyMd"><ClipboardCheck v-if="copied" :size="14" /><Copy v-else :size="14" /> {{ copied ? t.copied : t.export }}</button>
+        <button @click="copyMd">
+          <ClipboardCheck v-if="copied" :size="14" /><Copy v-else :size="14" /> {{ copied ? t.copied : t.export }}
+        </button>
         <span class="grow" />
         <button class="ghost" @click="emit('close')">{{ t.cancel }}</button>
         <button v-if="isPr" class="primary" :disabled="busy || nothing() || !canPublish" @click="publish">

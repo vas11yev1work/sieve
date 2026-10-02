@@ -8,8 +8,7 @@ export const SIEVE_HOME = process.env.SIEVE_HOME || join(homedir(), '.sieve')
 export const DEFAULT_SETTINGS: Settings = {
   reportLanguage: 'en',
   commentLanguage: 'en',
-  commentStyle:
-    'Short and friendly, 1-3 sentences. State the problem and the fix. No greetings, no filler, no praise.',
+  commentStyle: 'Short and friendly, 1-3 sentences. State the problem and the fix. No greetings, no filler, no praise.',
   rules: [
     'CLAUDE.md',
     '**/CLAUDE.md',

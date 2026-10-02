@@ -16,8 +16,18 @@ import type { Finding, RawFinding, RunMeta, RunState, Settings, Severity } from 
 import { SEVERITIES } from '../shared/types.ts'
 import { loadSettings } from './lib/settings.ts'
 import {
-  parseInput, repoRootOf, ensureRepo, currentRepoSlug, fetchPr, fetchPrRefs, prDiff, ensureWorktree,
-  excludeRuns, defaultBase, localDiff, requireGh,
+  parseInput,
+  repoRootOf,
+  ensureRepo,
+  currentRepoSlug,
+  fetchPr,
+  fetchPrRefs,
+  prDiff,
+  ensureWorktree,
+  excludeRuns,
+  defaultBase,
+  localDiff,
+  requireGh,
 } from './lib/source.ts'
 import { parseDiff, anchorFor } from './lib/diff.ts'
 import { discoverRules, isIgnored } from './lib/rules.ts'
@@ -77,7 +87,12 @@ function stopServer(runDir: string) {
 }
 
 function slug(s: string) {
-  return s.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'x'
+  return (
+    s
+      .replace(/[^\w.-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'x'
+  )
 }
 
 // ───────────────────────────── prepare ─────────────────────────────
@@ -239,7 +254,9 @@ async function prepare(argv: string[]) {
 // ───────────────────────────── candidates ─────────────────────────────
 
 function normalizePath(file: string, meta: RunMeta): string | null {
-  let f = String(file || '').trim().replace(/^\.\//, '')
+  let f = String(file || '')
+    .trim()
+    .replace(/^\.\//, '')
   if (isAbsolute(f)) f = relative(meta.worktree, f)
   if (meta.changedFiles.includes(f)) return f
   const bySuffix = meta.changedFiles.filter((c) => c.endsWith('/' + f) || f.endsWith('/' + c))
@@ -391,7 +408,12 @@ async function serve(argv: string[]) {
 
   if (values.detach) return serveDetached(runDir, values.port, !values['no-open'])
   const { startServer } = await import('../server/index.ts')
-  await startServer({ runDir, sieveRoot: SIEVE_ROOT, port: values.port ? +values.port : undefined, open: !values['no-open'] })
+  await startServer({
+    runDir,
+    sieveRoot: SIEVE_ROOT,
+    port: values.port ? +values.port : undefined,
+    open: !values['no-open'],
+  })
 }
 
 async function alive(url: string): Promise<boolean> {
@@ -404,7 +426,12 @@ async function alive(url: string): Promise<boolean> {
 }
 
 function openUrl(url: string) {
-  const cmd = process.platform === 'darwin' ? ['open', url] : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] : ['xdg-open', url]
+  const cmd =
+    process.platform === 'darwin'
+      ? ['open', url]
+      : process.platform === 'win32'
+        ? ['cmd', '/c', 'start', '', url]
+        : ['xdg-open', url]
   try {
     Bun.spawn(cmd, { stdout: 'ignore', stderr: 'ignore' })
   } catch {}
@@ -448,7 +475,13 @@ function runs() {
       if (!existsSync(paths(dir).meta)) continue
       const meta = readJson<RunMeta>(paths(dir).meta)
       const findings = readJson<Finding[]>(paths(dir).findings, [])
-      list.push({ runDir: dir, title: meta.title, url: meta.url, createdAt: meta.createdAt, findings: findings.filter((f) => !f.filtered).length })
+      list.push({
+        runDir: dir,
+        title: meta.title,
+        url: meta.url,
+        createdAt: meta.createdAt,
+        findings: findings.filter((f) => !f.filtered).length,
+      })
     }
   }
   out(list)

@@ -29,7 +29,11 @@ export interface FindingContext {
 }
 
 export interface ReviewPlan {
-  payload: { body: string; comments: { path: string; line: number; start_line?: number; body: string }[]; event: string }
+  payload: {
+    body: string
+    comments: { path: string; line: number; start_line?: number; body: string }[]
+    event: string
+  }
   ids: string[]
   inline: number
   general: number
@@ -58,9 +62,9 @@ export const api = {
       body: JSON.stringify(body),
     }).then((r) => json<{ reportLanguage: string; commentLanguage: string }>(r)),
   preview: (q: { event: string; summary: string; allGeneral: boolean }) =>
-    fetch(`/api/publish/preview?${new URLSearchParams({ event: q.event, summary: q.summary, allGeneral: q.allGeneral ? '1' : '' })}`).then(
-      (r) => json<ReviewPlan>(r),
-    ),
+    fetch(
+      `/api/publish/preview?${new URLSearchParams({ event: q.event, summary: q.summary, allGeneral: q.allGeneral ? '1' : '' })}`,
+    ).then((r) => json<ReviewPlan>(r)),
   publish: (body: { event: string; summary: string; allGeneral: boolean }) =>
     fetch('/api/publish', {
       method: 'POST',
@@ -68,6 +72,7 @@ export const api = {
       body: JSON.stringify(body),
     }).then((r) => json<{ url?: string; count: number; state: RunState }>(r)),
   exportMd: () => fetch('/api/export').then((r) => r.text()),
+  shutdown: () => fetch('/api/shutdown', { method: 'POST' }).then((r) => json<{ ok: boolean }>(r)),
 }
 
 export interface StreamHandlers {

@@ -1,7 +1,7 @@
 ---
 name: review
 description: Multi-agent code review of a GitHub PR (URL or number) or of local changes, opened in an interactive UI where each finding can be discussed, turned into a short comment and published to the PR. Use when the user asks to review a PR / pull request / their changes with Sieve.
-argument-hint: "[PR url | owner/repo#123 | 123] [--base <branch>] [--lang <lang>] [--comment-lang <lang>] [--force]"
+argument-hint: '[PR url | owner/repo#123 | 123] [--base <branch>] [--lang <lang>] [--comment-lang <lang>] [--force]'
 allowed-tools: Bash(bun:*), Bash(realpath:*), Bash(gh:*), Bash(git:*), Task, Read
 ---
 

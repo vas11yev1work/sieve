@@ -4,6 +4,7 @@ description: Checks the change against the project's own rules (CLAUDE.md, AGENT
 model: sonnet
 category: rules
 ---
+
 Audit the change for compliance with the PROJECT RULES listed below. This is your only focus — ignore bugs and general quality.
 
 - Read every applicable rule file first.

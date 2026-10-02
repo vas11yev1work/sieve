@@ -109,7 +109,10 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    opacity 0.12s;
 }
 button:hover:not(:disabled) {
   background: var(--panel-2);

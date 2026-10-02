@@ -66,7 +66,9 @@ export function reviewerPrompt(
 ): string {
   const rulesSection = rules.length
     ? '- Project rules that apply to this change (read the ones relevant to your focus):\n' +
-      rules.map((r) => `  - \`${join(meta.worktree, r.path)}\`${r.scope ? ` — scope: \`${r.scope}/\`` : ' — whole repo'}`).join('\n')
+      rules
+        .map((r) => `  - \`${join(meta.worktree, r.path)}\`${r.scope ? ` — scope: \`${r.scope}/\`` : ' — whole repo'}`)
+        .join('\n')
     : '- No project rule files were found.'
 
   const learned = join(meta.repoRoot, '.sieve', 'learned.md')
@@ -84,13 +86,23 @@ export function reviewerPrompt(
   })
 }
 
-export function validatorPrompt(sieveRoot: string, meta: RunMeta, settings: Settings, files: ParsedFile[], f: Finding): string {
+export function validatorPrompt(
+  sieveRoot: string,
+  meta: RunMeta,
+  settings: Settings,
+  files: ParsedFile[],
+  f: Finding,
+): string {
   const { id, file, line, endLine, severity, category, rule, title, explanation, suggestion } = f
   return render(template(sieveRoot, 'validator.md'), {
     ...commonVars(meta, settings, files),
     id,
     file,
-    finding: JSON.stringify({ id, file, line, endLine, severity, category, rule, title, explanation, suggestion }, null, 2),
+    finding: JSON.stringify(
+      { id, file, line, endLine, severity, category, rule, title, explanation, suggestion },
+      null,
+      2,
+    ),
   })
 }
 

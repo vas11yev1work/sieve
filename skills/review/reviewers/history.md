@@ -5,6 +5,7 @@ model: sonnet
 category: history
 enabled: false
 ---
+
 Use git history to find problems that are only visible with context from the past.
 
 For the most important modified regions, run `git -C <worktree> log -L <start>,<end>:<file> --max-count=5` or `git blame` on the BASE revision, and read the relevant commit messages.

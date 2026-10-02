@@ -61,6 +61,9 @@ const en = {
   draft: 'Draft',
   files: 'files',
   reviewerCount: 'reviewers',
+  finish: 'Finish',
+  finishConfirm: 'Stop the Sieve server? Unpublished work is already saved.',
+  stopped: 'Server stopped. You can close this tab.',
 }
 
 const ru: typeof en = {
@@ -124,6 +127,9 @@ const ru: typeof en = {
   draft: 'Драфт',
   files: 'файлов',
   reviewerCount: 'ревьюеров',
+  finish: 'Завершить',
+  finishConfirm: 'Остановить сервер Sieve? Всё неопубликованное уже сохранено.',
+  stopped: 'Сервер остановлен. Вкладку можно закрыть.',
 }
 
 export type Strings = typeof en

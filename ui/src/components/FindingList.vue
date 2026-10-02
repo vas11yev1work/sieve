@@ -23,10 +23,14 @@ import { Check, MessageSquareText, LoaderCircle, Inbox } from 'lucide-vue-next'
         <span class="grow" />
         <LoaderCircle v-if="store.pending[f.id]" :size="14" class="spin muted" />
         <span v-if="findingState(f.id).published" class="chip ok"><Check :size="12" /> {{ t.published }}</span>
-        <span v-else-if="findingState(f.id).comment" class="chip accent" :title="t.comment"><MessageSquareText :size="12" /></span>
+        <span v-else-if="findingState(f.id).comment" class="chip accent" :title="t.comment"
+          ><MessageSquareText :size="12"
+        /></span>
       </div>
       <div class="title">{{ f.title }}</div>
-      <div class="loc mono muted">{{ f.file }}:{{ f.line }}<template v-if="f.endLine">–{{ f.endLine }}</template></div>
+      <div class="loc mono muted">
+        {{ f.file }}:{{ f.line }}<template v-if="f.endLine">–{{ f.endLine }}</template>
+      </div>
     </button>
   </div>
 </template>

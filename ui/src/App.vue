@@ -6,7 +6,21 @@ import FindingList from './components/FindingList.vue'
 import FindingDetail from './components/FindingDetail.vue'
 import ChatPanel from './components/ChatPanel.vue'
 import PublishDialog from './components/PublishDialog.vue'
-import { Funnel, GitBranch, ArrowRight, Languages, Send, Copy, Keyboard, LoaderCircle, CircleAlert, GitPullRequest, FileDiff } from 'lucide-vue-next'
+import {
+  Funnel,
+  GitBranch,
+  ArrowRight,
+  Languages,
+  Send,
+  Copy,
+  Keyboard,
+  LoaderCircle,
+  CircleAlert,
+  GitPullRequest,
+  FileDiff,
+  Power,
+} from 'lucide-vue-next'
+import { api } from './api'
 
 const publishing = ref(false)
 const langOpen = ref(false)
@@ -24,11 +38,12 @@ const tabs = computed<{ id: Tab; label: string }[]>(() => [
   { id: 'filtered', label: t.value.filtered },
 ])
 
-const ready = computed(() =>
-  (store.run?.findings || []).filter((f) => {
-    const s = findingState(f.id)
-    return s.status === 'accepted' && s.comment && !s.published
-  }).length,
+const ready = computed(
+  () =>
+    (store.run?.findings || []).filter((f) => {
+      const s = findingState(f.id)
+      return s.status === 'accepted' && s.comment && !s.published
+    }).length,
 )
 
 watch(
@@ -46,13 +61,24 @@ function openLang() {
 }
 
 async function applyLang() {
-  await setLanguages({ reportLanguage: reportLang.value.trim(), commentLanguage: commentLang.value.trim(), persist: persist.value })
+  await setLanguages({
+    reportLanguage: reportLang.value.trim(),
+    commentLanguage: commentLang.value.trim(),
+    persist: persist.value,
+  })
   langOpen.value = false
+}
+
+async function finish() {
+  if (!confirm(t.value.finishConfirm)) return
+  await api.shutdown().catch(() => {})
+  store.error = t.value.stopped
 }
 
 function onKey(e: KeyboardEvent) {
   const el = e.target as HTMLElement
-  if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.isContentEditable)) return
+  if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.isContentEditable))
+    return
   if (e.metaKey || e.ctrlKey || e.altKey || publishing.value) return
   if (e.key === 'j' || e.key === 'ArrowDown') {
     move(1)
@@ -74,7 +100,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 <template>
   <div v-if="store.loading" class="center muted"><LoaderCircle :size="22" class="spin" /></div>
-  <div v-else-if="store.error" class="center error"><div><CircleAlert :size="22" /> {{ store.error }}</div></div>
+  <div v-else-if="store.error" class="center error">
+    <div><CircleAlert :size="22" /> {{ store.error }}</div>
+  </div>
 
   <div v-else-if="store.run" class="app">
     <header class="bar">
@@ -85,14 +113,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <div class="pr">
         <div class="title">
           <a v-if="store.run.meta.url" :href="store.run.meta.url" target="_blank" rel="noopener">
-            <GitPullRequest :size="15" class="muted" /> <span v-if="store.run.meta.number" class="muted">#{{ store.run.meta.number }}</span>
+            <GitPullRequest :size="15" class="muted" />
+            <span v-if="store.run.meta.number" class="muted">#{{ store.run.meta.number }}</span>
             {{ store.run.meta.title }}
           </a>
           <span v-else><FileDiff :size="15" class="muted" /> {{ store.run.meta.title }}</span>
         </div>
         <div class="sub muted">
           <span v-if="store.run.meta.owner">{{ store.run.meta.owner }}/{{ store.run.meta.repo }} · </span>
-          <span class="mono branch"><GitBranch :size="12" /> {{ store.run.meta.headRef }} <ArrowRight :size="12" /> {{ store.run.meta.baseRef }}</span>
+          <span class="mono branch"
+            ><GitBranch :size="12" /> {{ store.run.meta.headRef }} <ArrowRight :size="12" />
+            {{ store.run.meta.baseRef }}</span
+          >
           <span v-if="store.run.meta.author"> · @{{ store.run.meta.author }}</span>
           · {{ store.run.meta.changedFiles }} {{ t.files }}
           <span v-if="store.run.meta.isDraft" class="chip">{{ t.draft }}</span>
@@ -102,7 +134,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <div class="actions">
         <div class="lang-wrap">
           <button class="ghost" :title="t.languageHint" @click="openLang">
-            <Languages :size="15" /> <span class="mono">{{ store.run.settings.reportLanguage }}</span> / <span class="mono">{{ store.run.settings.commentLanguage }}</span>
+            <Languages :size="15" /> <span class="mono">{{ store.run.settings.reportLanguage }}</span> /
+            <span class="mono">{{ store.run.settings.commentLanguage }}</span>
           </button>
           <div v-if="langOpen" class="popover">
             <div class="muted hint">{{ t.languageHint }}</div>
@@ -129,11 +162,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           {{ store.run.meta.mode === 'pr' ? t.publish : t.export }}
           <span v-if="ready" class="count">{{ ready }}</span>
         </button>
+        <button class="ghost" :title="t.finish" @click="finish"><Power :size="15" /> {{ t.finish }}</button>
       </div>
     </header>
 
     <nav class="tabs">
-      <button v-for="tb in tabs" :key="tb.id" class="tab" :class="{ active: store.tab === tb.id }" @click="store.tab = tb.id">
+      <button
+        v-for="tb in tabs"
+        :key="tb.id"
+        class="tab"
+        :class="{ active: store.tab === tb.id }"
+        @click="store.tab = tb.id"
+      >
         {{ tb.label }} <span class="n">{{ counts[tb.id] }}</span>
       </button>
       <span class="grow" />

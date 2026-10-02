@@ -1,11 +1,32 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import type { Finding } from '../../../shared/types'
-import { store, findingState, sendChat, generateComment, stopStream, resetChat, update, selectNextAfter } from '../store'
+import {
+  store,
+  findingState,
+  sendChat,
+  generateComment,
+  stopStream,
+  resetChat,
+  update,
+  selectNextAfter,
+} from '../store'
 import { t } from '../i18n'
 import Markdown from './Markdown.vue'
 import {
-  MessageSquare, Eraser, Bot, LoaderCircle, Send, Square, Sparkles, Check, X, RotateCcw, ExternalLink, PenLine, CircleAlert,
+  MessageSquare,
+  Eraser,
+  Bot,
+  LoaderCircle,
+  Send,
+  Square,
+  Sparkles,
+  Check,
+  X,
+  RotateCcw,
+  ExternalLink,
+  PenLine,
+  CircleAlert,
 } from 'lucide-vue-next'
 
 const props = defineProps<{ finding: Finding }>()
@@ -116,12 +137,16 @@ const lastWasNoComment = computed(() => {
   <div class="panel">
     <div class="head">
       <span class="label"><MessageSquare :size="12" /> {{ t.chat }}</span>
-      <button v-if="st.messages.length && !pending" class="ghost small" @click="resetChat(id)"><Eraser :size="13" /> {{ t.resetChat }}</button>
+      <button v-if="st.messages.length && !pending" class="ghost small" @click="resetChat(id)">
+        <Eraser :size="13" /> {{ t.resetChat }}
+      </button>
     </div>
 
     <div ref="log" class="log scroll">
       <div v-if="!canChat" class="hint danger-text"><CircleAlert :size="16" /> {{ t.chatUnavailable }}</div>
-      <div v-else-if="!st.messages.length && !pending" class="hint muted empty"><Bot :size="26" :stroke-width="1.5" /> {{ t.chatEmpty }}</div>
+      <div v-else-if="!st.messages.length && !pending" class="hint muted empty">
+        <Bot :size="26" :stroke-width="1.5" /> {{ t.chatEmpty }}
+      </div>
 
       <div v-for="(m, i) in st.messages" :key="i" class="msg" :class="[m.role, m.kind]">
         <div v-if="m.kind === 'comment'" class="tag"><PenLine :size="11" /> {{ t.comment }}</div>
@@ -142,17 +167,13 @@ const lastWasNoComment = computed(() => {
     </div>
 
     <div class="composer">
-      <textarea
-        v-model="input"
-        rows="2"
-        :placeholder="t.chatPlaceholder"
-        :disabled="!canChat"
-        @keydown="onKey"
-      />
+      <textarea v-model="input" rows="2" :placeholder="t.chatPlaceholder" :disabled="!canChat" @keydown="onKey" />
       <div class="row">
         <span class="grow" />
         <button v-if="pending" class="danger" @click="stopStream(id)"><Square :size="13" /> {{ t.stop }}</button>
-        <button v-else class="primary" :disabled="!input.trim() || !canChat" @click="send"><Send :size="14" /> {{ t.send }}</button>
+        <button v-else class="primary" :disabled="!input.trim() || !canChat" @click="send">
+          <Send :size="14" /> {{ t.send }}
+        </button>
       </div>
     </div>
 
@@ -176,7 +197,9 @@ const lastWasNoComment = computed(() => {
 
       <div v-if="st.published" class="row">
         <span class="chip ok"><Check :size="12" /> {{ t.published }}</span>
-        <a v-if="st.published.url" class="link" :href="st.published.url" target="_blank" rel="noopener">{{ t.openOnGithub }} <ExternalLink :size="12" /></a>
+        <a v-if="st.published.url" class="link" :href="st.published.url" target="_blank" rel="noopener"
+          >{{ t.openOnGithub }} <ExternalLink :size="12"
+        /></a>
       </div>
 
       <div v-else-if="rejecting" class="reject">
@@ -197,7 +220,8 @@ const lastWasNoComment = computed(() => {
         </template>
         <template v-else>
           <span class="chip" :class="st.status === 'accepted' ? 'ok' : 'danger'">
-            <Check v-if="st.status === 'accepted'" :size="12" /><X v-else :size="12" /> {{ st.status === 'accepted' ? t.accepted : t.rejected }}
+            <Check v-if="st.status === 'accepted'" :size="12" /><X v-else :size="12" />
+            {{ st.status === 'accepted' ? t.accepted : t.rejected }}
           </span>
           <span v-if="st.status === 'rejected' && st.rejectReason" class="muted small-text">{{ st.rejectReason }}</span>
           <span class="grow" />

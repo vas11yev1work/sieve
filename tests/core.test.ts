@@ -108,7 +108,14 @@ describe('buildReview', () => {
     const plan = buildReview(meta, findings, state, { summary: 'Summary' })
     expect(plan.ids).toEqual(['f1', 'f2'])
     expect(plan.payload.comments).toEqual([
-      { path: 'a.ts', line: 3, start_line: 2, side: 'RIGHT', start_side: 'RIGHT', body: 'Fix it\n```suggestion\nx\n```' },
+      {
+        path: 'a.ts',
+        line: 3,
+        start_line: 2,
+        side: 'RIGHT',
+        start_side: 'RIGHT',
+        body: 'Fix it\n```suggestion\nx\n```',
+      },
     ])
     expect(plan.payload.body).toContain('Summary')
     expect(plan.payload.body).toContain('https://github.com/o/r/blob/abc/b.ts#L50')

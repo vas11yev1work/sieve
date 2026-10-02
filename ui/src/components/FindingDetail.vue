@@ -53,15 +53,21 @@ const v = computed(() => props.finding.validation)
         :class="v.verdict === 'valid' ? 'ok' : 'danger'"
         :title="v.reason || ''"
       >
-        <ShieldCheck v-if="v.verdict === 'valid'" :size="12" /><ShieldX v-else :size="12" /> {{ v.verdict }}<template v-if="v.confidence !== undefined"> · {{ Math.round(v.confidence * 100) }}%</template>
+        <ShieldCheck v-if="v.verdict === 'valid'" :size="12" /><ShieldX v-else :size="12" /> {{ v.verdict
+        }}<template v-if="v.confidence !== undefined"> · {{ Math.round(v.confidence * 100) }}%</template>
       </span>
     </div>
 
     <h2>{{ finding.title }}</h2>
 
     <div class="loc mono">
-      <a v-if="fileLink" :href="fileLink" target="_blank" rel="noopener">{{ finding.file }}:{{ finding.line }}<template v-if="finding.endLine">–{{ finding.endLine }}</template> <ExternalLink :size="12" /></a>
-      <span v-else>{{ finding.file }}:{{ finding.line }}<template v-if="finding.endLine">–{{ finding.endLine }}</template></span>
+      <a v-if="fileLink" :href="fileLink" target="_blank" rel="noopener"
+        >{{ finding.file }}:{{ finding.line }}<template v-if="finding.endLine">–{{ finding.endLine }}</template>
+        <ExternalLink :size="12"
+      /></a>
+      <span v-else
+        >{{ finding.file }}:{{ finding.line }}<template v-if="finding.endLine">–{{ finding.endLine }}</template></span
+      >
     </div>
 
     <div v-if="!finding.inDiff" class="notice"><TriangleAlert :size="15" /> {{ t.outsideDiff }}</div>
@@ -69,7 +75,9 @@ const v = computed(() => props.finding.validation)
     <Markdown class="explanation" :text="finding.explanation" />
 
     <blockquote v-if="finding.rule" class="rule">
-      <div class="label"><BookOpen :size="12" /> {{ t.rule }} · <span class="mono">{{ finding.rule.path }}</span></div>
+      <div class="label">
+        <BookOpen :size="12" /> {{ t.rule }} · <span class="mono">{{ finding.rule.path }}</span>
+      </div>
       {{ finding.rule.quote }}
     </blockquote>
 

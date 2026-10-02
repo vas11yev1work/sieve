@@ -22,15 +22,15 @@ prepare ──► reviewers (parallel) ──► merge ──► validators (par
   CLI        Claude Code subagents   orchestr.   Claude Code subagents      CLI      Bun+Vue   gh api
 ```
 
-| Step | Who | What |
-| --- | --- | --- |
-| prepare | `cli/sieve.ts` | Resolves the input, fetches the PR into a detached git worktree at the PR head, takes the diff exactly as GitHub shows it, drops ignored files, finds applicable rule files, renders a prompt per reviewer. |
-| review | subagents | Each enabled reviewer gets its own prompt and returns findings as JSON. Default: `rules` (sonnet), `bugs-diff` (opus), `bugs-logic` (opus); `history` (git blame/log) is off by default. |
-| merge | orchestrator | Merges duplicates found by several reviewers. |
-| candidates | CLI | Normalizes paths, drops findings outside changed files or below `minSeverity`, computes where an inline comment can be anchored. |
-| validate | subagents | One skeptical validator per finding (opus for bugs/security, sonnet for rules by default). Rejected / low-confidence findings go to the *Filtered out* tab. |
-| UI | `server/` + `ui/` | Local server on `127.0.0.1`. Per-finding chat runs `claude -p` with `--resume`, read-only tools (`Read`, `Grep`, `Glob`), cwd = the PR worktree. |
-| publish | `gh api` | `POST /repos/{o}/{r}/pulls/{n}/reviews` with `commit_id` = PR head. Findings outside the diff go into the review body with permalinks. |
+| Step       | Who               | What                                                                                                                                                                                                        |
+| ---------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prepare    | `cli/sieve.ts`    | Resolves the input, fetches the PR into a detached git worktree at the PR head, takes the diff exactly as GitHub shows it, drops ignored files, finds applicable rule files, renders a prompt per reviewer. |
+| review     | subagents         | Each enabled reviewer gets its own prompt and returns findings as JSON. Default: `rules` (sonnet), `bugs-diff` (opus), `bugs-logic` (opus); `history` (git blame/log) is off by default.                    |
+| merge      | orchestrator      | Merges duplicates found by several reviewers.                                                                                                                                                               |
+| candidates | CLI               | Normalizes paths, drops findings outside changed files or below `minSeverity`, computes where an inline comment can be anchored.                                                                            |
+| validate   | subagents         | One skeptical validator per finding (opus for bugs/security, sonnet for rules by default). Rejected / low-confidence findings go to the _Filtered out_ tab.                                                 |
+| UI         | `server/` + `ui/` | Local server on `127.0.0.1`. Per-finding chat runs `claude -p` with `--resume`, read-only tools (`Read`, `Grep`, `Glob`), cwd = the PR worktree.                                                            |
+| publish    | `gh api`          | `POST /repos/{o}/{r}/pulls/{n}/reviews` with `commit_id` = PR head. Findings outside the diff go into the review body with permalinks.                                                                      |
 
 The pipeline is the same idea as Anthropic's official `code-review` plugin (independent parallel reviewers + per-issue validation), with your rules, your language and a human in the loop before anything is posted.
 
@@ -95,22 +95,22 @@ Languages can also be switched in the UI (languages button in the header); "save
 {
   "$schema": "https://raw.githubusercontent.com/vas11yev1work/sieve/main/schema/settings.schema.json",
 
-  "reportLanguage": "ru",     // findings, explanations and the chat
-  "commentLanguage": "en",    // comments published to the PR
+  "reportLanguage": "ru", // findings, explanations and the chat
+  "commentLanguage": "en", // comments published to the PR
   "commentStyle": "Short and friendly, 1-3 sentences. State the problem and the fix.",
 
-  "rulesExtra": ["docs/conventions/**/*.md"],   // added to the default rule globs
-  "ignoreExtra": ["**/*.generated.ts"],         // added to the default ignore globs
+  "rulesExtra": ["docs/conventions/**/*.md"], // added to the default rule globs
+  "ignoreExtra": ["**/*.generated.ts"], // added to the default ignore globs
 
   "reviewers": {
-    "history":   { "enabled": true },           // turn on an optional reviewer
-    "bugs-diff": { "model": "sonnet" }          // cheaper model for a reviewer
+    "history": { "enabled": true }, // turn on an optional reviewer
+    "bugs-diff": { "model": "sonnet" }, // cheaper model for a reviewer
   },
 
-  "minSeverity": "minor",                       // critical | major | minor | nit
+  "minSeverity": "minor", // critical | major | minor | nit
   "validation": { "enabled": true, "model": "auto", "minConfidence": 0.6 },
   "chat": { "model": "sonnet", "tools": ["Read", "Grep", "Glob"] },
-  "server": { "port": 0, "open": true }
+  "server": { "port": 0, "open": true },
 }
 ```
 
@@ -131,10 +131,11 @@ A reviewer is a markdown file with frontmatter. Add your own (or override a buil
 ---
 name: vue
 description: Vue 3 + TypeScript specifics
-model: sonnet          # haiku | sonnet | opus
-category: bug          # default category of its findings
+model: sonnet # haiku | sonnet | opus
+category: bug # default category of its findings
 enabled: true
 ---
+
 Review only Vue-specific problems in the changed files: lost reactivity, …
 ```
 
