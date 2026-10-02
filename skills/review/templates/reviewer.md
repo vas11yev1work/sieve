@@ -67,7 +67,7 @@ Return ONLY a JSON array, no prose before or after, no code fences. Each item:
   "rule": { "path": ".claude/rules/vue.md", "quote": "exact sentence from the rule" },  // only for rule violations
   "title": "one short line",
   "explanation": "why this is a problem, concrete, 1-4 sentences",
-  "suggestion": "how to fix it; a short code snippet is welcome",
+  "suggestion": "how to fix it: one sentence; if the fix is small (up to ~15 lines), add the fixed code in a fenced block with the language, e.g. ```ts",
   "confidence": 0.0-1.0
 }
 ```

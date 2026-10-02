@@ -1,6 +1,6 @@
 {
   "name": "sieve-review",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Multi-agent AI code review for Claude Code with an interactive UI: discuss each finding, keep only what matters, publish to GitHub.",
   "type": "module",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "sieve",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Multi-agent code review with an interactive UI: discuss each finding, generate short comments, publish to GitHub.",
   "author": {
     "name": "Anatolii Vasilev"
