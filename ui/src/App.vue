@@ -99,15 +99,15 @@ function onKey(e: KeyboardEvent) {
   if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.isContentEditable))
     return;
   if (e.metaKey || e.ctrlKey || e.altKey || publishing.value) return;
-  if (e.key === 'j' || e.key === 'ArrowDown') {
+  if (e.code === 'KeyJ' || e.key === 'ArrowDown') {
     move(1);
     e.preventDefault();
-  } else if (e.key === 'k' || e.key === 'ArrowUp') {
+  } else if (e.code === 'KeyK' || e.key === 'ArrowUp') {
     move(-1);
     e.preventDefault();
-  } else if (e.key === 'a' && current.value) chat.value?.accept();
-  else if (e.key === 'r' && current.value) chat.value?.startReject();
-  else if (e.key === 'g' && current.value) chat.value?.generate();
+  } else if (e.code === 'KeyA' && current.value) chat.value?.accept();
+  else if (e.code === 'KeyR' && current.value) chat.value?.startReject();
+  else if (e.code === 'KeyG' && current.value) chat.value?.generate();
 }
 
 onMounted(() => {
