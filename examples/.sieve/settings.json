@@ -1,0 +1,13 @@
+{
+  "reportLanguage": "en",
+  "commentLanguage": "en",
+  "commentStyle": "Short and friendly, 1-3 sentences. State the problem and the fix. No greetings, no filler.",
+  "rulesExtra": ["docs/conventions/**/*.md"],
+  "ignoreExtra": ["**/*.generated.ts", "locales/**/*.json"],
+  "reviewers": {
+    "history": { "enabled": true },
+    "bugs-diff": { "model": "sonnet" }
+  },
+  "minSeverity": "minor",
+  "validation": { "enabled": true, "model": "auto", "minConfidence": 0.6 }
+}

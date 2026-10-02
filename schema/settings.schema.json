@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Sieve settings",
+  "description": "~/.sieve/settings.json, <repo>/.sieve/settings.json or <repo>/.sieve/settings.local.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "reportLanguage": {
+      "type": "string",
+      "description": "Language of findings, explanations and the chat. ISO code (en, ru, sr…) or a name.",
+      "default": "en"
+    },
+    "commentLanguage": {
+      "type": "string",
+      "description": "Language of comments published to the PR.",
+      "default": "en"
+    },
+    "commentStyle": {
+      "type": "string",
+      "description": "Tone/format instructions for generated PR comments."
+    },
+    "rules": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns of rule files (replaces the defaults). Use rulesExtra to add to the defaults."
+    },
+    "rulesExtra": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns of rule files added to the defaults, e.g. \"docs/conventions/**/*.md\"."
+    },
+    "ignore": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns of files excluded from review (replaces the defaults). Use ignoreExtra to add."
+    },
+    "ignoreExtra": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns added to the default ignore list, e.g. \"**/*.generated.ts\"."
+    },
+    "reviewers": {
+      "type": "object",
+      "description": "Enable/disable reviewers or change their model, by name.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "model": { "type": "string", "description": "haiku | sonnet | opus" }
+        }
+      }
+    },
+    "minSeverity": {
+      "enum": ["critical", "major", "minor", "nit"],
+      "description": "Findings below this severity are dropped.",
+      "default": "minor"
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "model": {
+          "type": "string",
+          "description": "\"auto\" = opus for bugs/security, sonnet for the rest; or haiku | sonnet | opus.",
+          "default": "auto"
+        },
+        "minConfidence": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.6 }
+      }
+    },
+    "chat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string", "default": "sonnet" },
+        "tools": { "type": "array", "items": { "type": "string" }, "default": ["Read", "Grep", "Glob"] }
+      }
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": { "type": "integer", "description": "0 = random free port", "default": 0 },
+        "open": { "type": "boolean", "description": "Open the browser automatically", "default": true }
+      }
+    }
+  }
+}
