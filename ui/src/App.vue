@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
-import { store, load, counts, current, move, setLanguages, findingState, visible, type Tab } from './store';
+import {
+  store,
+  load,
+  counts,
+  kindCounts,
+  current,
+  move,
+  setLanguages,
+  findingState,
+  visible,
+  type Tab,
+  type Kind,
+} from './store';
 import { t } from './i18n';
 import FindingList from './components/FindingList.vue';
 import FindingDetail from './components/FindingDetail.vue';
@@ -38,6 +50,13 @@ const tabs = computed<{ id: Tab; label: string }[]>(() => [
   { id: 'filtered', label: t.value.filtered },
 ]);
 
+const kinds = computed<{ id: Kind; label: string }[]>(() => [
+  { id: 'all', label: t.value.all },
+  { id: 'issues', label: t.value.issues },
+  { id: 'quality', label: t.value.quality },
+]);
+const hasQuality = computed(() => store.run?.findings.some((f) => f.category === 'quality'));
+
 const ready = computed(
   () =>
     (store.run?.findings || []).filter((f) => {
@@ -47,7 +66,7 @@ const ready = computed(
 );
 
 watch(
-  () => store.tab,
+  () => [store.tab, store.kind],
   () => {
     if (!visible.value.some((f) => f.id === store.selected)) store.selected = visible.value[0]?.id || '';
   },
@@ -176,6 +195,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
       >
         {{ tb.label }} <span class="n">{{ counts[tb.id] }}</span>
       </button>
+      <span v-if="hasQuality" class="kinds">
+        <button
+          v-for="k in kinds"
+          :key="k.id"
+          class="tab"
+          :class="{ active: store.kind === k.id }"
+          @click="store.kind = k.id"
+        >
+          {{ k.label }} <span class="n">{{ kindCounts[k.id] }}</span>
+        </button>
+      </span>
       <span class="grow" />
       <span class="muted shortcuts"><Keyboard :size="13" /> {{ t.shortcuts }}</span>
     </nav>
@@ -319,6 +349,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
   padding: 6px 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+}
+.kinds {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
 }
 .tab {
   border: none;

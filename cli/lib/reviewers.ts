@@ -50,8 +50,16 @@ function loadDir(dir: string, source: string): Reviewer[] {
  * Reviewers come from three places; a later one with the same name replaces an earlier one:
  *   <sieve>/skills/review/reviewers  <  ~/.sieve/reviewers  <  <repo>/.sieve/reviewers
  * Then `settings.reviewers[name]` can disable a reviewer or change its model.
+ * `only` (from `--only`) runs exactly the named reviewers, including ones disabled in settings.
+ * `skip` (from `--skip`) removes the named reviewers from whatever would run.
  */
-export function loadReviewers(sieveRoot: string, repoRoot: string, settings: Settings): Reviewer[] {
+export function loadReviewers(
+  sieveRoot: string,
+  repoRoot: string,
+  settings: Settings,
+  only?: string[],
+  skip?: string[],
+): Reviewer[] {
   const byName = new Map<string, Reviewer>();
   for (const r of [
     ...loadDir(join(sieveRoot, 'skills', 'review', 'reviewers'), 'builtin'),
@@ -66,5 +74,9 @@ export function loadReviewers(sieveRoot: string, repoRoot: string, settings: Set
     if (cfg.enabled !== undefined) r.enabled = cfg.enabled;
     if (cfg.model) r.model = cfg.model;
   }
-  return [...byName.values()].filter((r) => r.enabled);
+  const unknown = [...(only || []), ...(skip || [])].filter((n) => !byName.has(n));
+  if (unknown.length)
+    throw new Error(`Unknown reviewer(s): ${unknown.join(', ')}. Available: ${[...byName.keys()].join(', ')}`);
+  const picked = only?.length ? only.map((n) => byName.get(n)!) : [...byName.values()].filter((r) => r.enabled);
+  return picked.filter((r) => !skip?.includes(r.name));
 }

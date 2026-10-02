@@ -27,7 +27,8 @@ so reject anything you cannot confirm from the code.
 2. Follow the code as far as needed: callers, types, imports, configs. Use read-only tools only.
 3. If the finding cites a project rule, open the rule file, confirm the quote exists, that the rule's
    scope covers this file, and that the code really breaks it.
-4. Reject it if: it existed before the change; it is a style opinion; it depends on unknowable inputs;
+4. Reject it if: it existed before the change; it is a style opinion (for `category: "quality"` a concrete,
+   actionable improvement is not an opinion — check the facts it relies on, e.g. that the duplicated code really exists); it depends on unknowable inputs;
    it is a pure style issue a linter/formatter would fix; it is silenced on purpose; or the reasoning is simply wrong.
 5. If it is real but the line numbers are off, return the corrected lines.
 

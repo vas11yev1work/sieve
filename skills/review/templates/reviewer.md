@@ -45,7 +45,7 @@ Do NOT report:
 
 - issues that existed before this change (only lines added or modified by the diff, or behaviour the diff breaks);
 - pure style issues a linter or formatter would fix automatically;
-- style, naming or "could be cleaner" opinions not backed by a project rule;
+- style, naming or "could be cleaner" opinions not backed by a project rule, unless your focus is code quality;
 - speculative problems that depend on unknown inputs or state;
 - missing tests or docs, unless a project rule requires them;
 - rules that are explicitly silenced in code (e.g. eslint-disable with a reason);

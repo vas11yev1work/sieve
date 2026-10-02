@@ -3,7 +3,7 @@
  * Sieve CLI — the deterministic half of the review pipeline.
  * The Claude Code skill (skills/review/SKILL.md) orchestrates the agents and calls these commands.
  *
- *   sieve prepare [PR url | owner/repo#n | n] [--base <ref>] [--lang <l>] [--comment-lang <l>] [--force]
+ *   sieve prepare [PR url | owner/repo#n | n] [--base <ref>] [--lang <l>] [--comment-lang <l>] [--only <a,b>] [--skip <a,b>] [--min-severity <s>] [--force]
  *   sieve candidates <runDir>    < merged reviewer findings (JSON array)
  *   sieve finalize <runDir>      < validator verdicts (JSON array, optional)
  *   sieve serve <runDir> [--port <n>] [--no-open]
@@ -105,6 +105,9 @@ async function prepare(argv: string[]) {
       base: { type: 'string' },
       lang: { type: 'string' },
       'comment-lang': { type: 'string' },
+      only: { type: 'string' },
+      skip: { type: 'string' },
+      'min-severity': { type: 'string' },
       force: { type: 'boolean', default: false },
       cwd: { type: 'string' },
     },
@@ -115,6 +118,19 @@ async function prepare(argv: string[]) {
   const overrides: Partial<Settings> = {};
   if (values.lang) overrides.reportLanguage = values.lang;
   if (values['comment-lang']) overrides.commentLanguage = values['comment-lang'];
+  const minSeverity = values['min-severity'];
+  if (minSeverity) {
+    if (!SEVERITIES.includes(minSeverity as Severity)) die(`--min-severity must be one of: ${SEVERITIES.join(', ')}`);
+    overrides.minSeverity = minSeverity as Severity;
+  }
+  const only = values.only
+    ?.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const skip = values.skip
+    ?.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   let meta: RunMeta;
   let patch: string;
@@ -219,7 +235,7 @@ async function prepare(argv: string[]) {
   const rules = discoverRules(meta.worktree, settings.rules, meta.changedFiles);
   writeJson(p.rules, rules);
 
-  const reviewers = loadReviewers(SIEVE_ROOT, meta.repoRoot, settings);
+  const reviewers = loadReviewers(SIEVE_ROOT, meta.repoRoot, settings, only, skip);
   mkdirSync(p.prompts, { recursive: true });
   const plan = reviewers.map((r) => {
     const file = join(p.prompts, `review-${r.name}.md`);
@@ -510,7 +526,7 @@ try {
     default:
       process.stdout.write(
         'usage: sieve <prepare|candidates|finalize|serve|runs> …\n' +
-          '  prepare [PR url | owner/repo#n | n] [--base ref] [--lang l] [--comment-lang l] [--force]\n' +
+          '  prepare [PR url | owner/repo#n | n] [--base ref] [--lang l] [--comment-lang l] [--only a,b] [--skip a,b] [--min-severity s] [--force]\n' +
           '  candidates <runDir>   < findings JSON\n' +
           '  finalize <runDir>     < verdicts JSON\n' +
           '  serve <runDir> [--port n] [--no-open]\n' +

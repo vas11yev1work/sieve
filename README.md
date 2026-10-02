@@ -22,15 +22,15 @@ prepare ──► reviewers (parallel) ──► merge ──► validators (par
   CLI        Claude Code subagents   orchestr.   Claude Code subagents      CLI      Bun+Vue   gh api
 ```
 
-| Step       | Who               | What                                                                                                                                                                                                        |
-| ---------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| prepare    | `cli/sieve.ts`    | Resolves the input, fetches the PR into a detached git worktree at the PR head, takes the diff exactly as GitHub shows it, drops ignored files, finds applicable rule files, renders a prompt per reviewer. |
-| review     | subagents         | Each enabled reviewer gets its own prompt and returns findings as JSON. Default: `rules` (sonnet), `bugs-diff` (opus), `bugs-logic` (opus); `history` (git blame/log) is off by default.                    |
-| merge      | orchestrator      | Merges duplicates found by several reviewers.                                                                                                                                                               |
-| candidates | CLI               | Normalizes paths, drops findings outside changed files or below `minSeverity`, computes where an inline comment can be anchored.                                                                            |
-| validate   | subagents         | One skeptical validator per finding (opus for bugs/security, sonnet for rules by default). Rejected / low-confidence findings go to the _Filtered out_ tab.                                                 |
-| UI         | `server/` + `ui/` | Local server on `127.0.0.1`. Per-finding chat runs `claude -p` with `--resume`, read-only tools (`Read`, `Grep`, `Glob`), cwd = the PR worktree.                                                            |
-| publish    | `gh api`          | `POST /repos/{o}/{r}/pulls/{n}/reviews` with `commit_id` = PR head. Findings outside the diff go into the review body with permalinks.                                                                      |
+| Step       | Who               | What                                                                                                                                                                                                         |
+| ---------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| prepare    | `cli/sieve.ts`    | Resolves the input, fetches the PR into a detached git worktree at the PR head, takes the diff exactly as GitHub shows it, drops ignored files, finds applicable rule files, renders a prompt per reviewer.  |
+| review     | subagents         | Each enabled reviewer gets its own prompt and returns findings as JSON. Default: `rules` (sonnet), `bugs-diff` (opus), `bugs-logic` (opus), `quality` (sonnet); `history` (git blame/log) is off by default. |
+| merge      | orchestrator      | Merges duplicates found by several reviewers.                                                                                                                                                                |
+| candidates | CLI               | Normalizes paths, drops findings outside changed files or below `minSeverity`, computes where an inline comment can be anchored.                                                                             |
+| validate   | subagents         | One skeptical validator per finding (opus for bugs/security, sonnet for rules by default). Rejected / low-confidence findings go to the _Filtered out_ tab.                                                  |
+| UI         | `server/` + `ui/` | Local server on `127.0.0.1`. Per-finding chat runs `claude -p` with `--resume`, read-only tools (`Read`, `Grep`, `Glob`), cwd = the PR worktree.                                                             |
+| publish    | `gh api`          | `POST /repos/{o}/{r}/pulls/{n}/reviews` with `commit_id` = PR head. Findings outside the diff go into the review body with permalinks.                                                                       |
 
 The pipeline is the same idea as Anthropic's official `code-review` plugin (independent parallel reviewers + per-issue validation), with your rules, your language and a human in the loop before anything is posted.
 
@@ -68,6 +68,9 @@ The UI is built automatically on the first run (`bun install && bun run build`, 
 /sieve:review                                          # local changes vs the default branch
 /sieve:review --base develop                           # local changes vs a specific branch
 /sieve:review 1234 --lang ru --comment-lang en         # override languages for this run
+/sieve:review 1234 --only quality,history              # run only these reviewers (even if disabled)
+/sieve:review 1234 --skip quality                      # the usual set minus these reviewers
+/sieve:review 1234 --min-severity nit                  # show everything, down to nits
 /sieve:review 1234 --force                             # re-review a revision that was already reviewed
 ```
 
@@ -87,7 +90,7 @@ Settings are merged in this order (later wins):
 2. `~/.sieve/settings.json` — your personal defaults for every project
 3. `<repo>/.sieve/settings.json` — team settings, commit it
 4. `<repo>/.sieve/settings.local.json` — your personal overrides for this project, keep it out of git
-5. CLI flags (`--lang`, `--comment-lang`)
+5. CLI flags (`--lang`, `--comment-lang`, `--min-severity`)
 
 Languages can also be switched in the UI (languages button in the header); "save as default" writes them to `settings.local.json`.
 
@@ -150,7 +153,7 @@ When you reject a finding with a reason and keep "Remember for future reviews" c
 The skill drives the CLI, but you can use it directly:
 
 ```
-bun cli/sieve.ts prepare [PR] [--base ref] [--lang l] [--comment-lang l] [--force]
+bun cli/sieve.ts prepare [PR] [--base ref] [--lang l] [--comment-lang l] [--only a,b] [--skip a,b] [--min-severity s] [--force]
 bun cli/sieve.ts candidates <runDir>  < findings.json
 bun cli/sieve.ts finalize <runDir>    < verdicts.json
 bun cli/sieve.ts serve <runDir> [--port n] [--no-open] [--detach]
