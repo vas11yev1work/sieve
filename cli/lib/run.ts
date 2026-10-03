@@ -12,6 +12,8 @@ export const paths = (runDir: string) => ({
   findings: join(runDir, 'findings.json'),
   state: join(runDir, 'state.json'),
   prompts: join(runDir, 'prompts'),
+  map: join(runDir, 'map.json'),
+  mapPrompt: join(runDir, 'prompts', 'map.md'),
   worktree: join(runDir, 'wt'),
   server: join(runDir, 'server.json'),
 });
@@ -30,6 +32,37 @@ export function writeJson(path: string, data: unknown) {
   const tmp = `${path}.${process.pid}.tmp`;
   writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n');
   renameSync(tmp, path);
+}
+
+/**
+ * Parse agent output: plain JSON, or text with a JSON array/object inside
+ * (agents sometimes wrap output in prose or code fences).
+ */
+export function parseJsonLoose(text: string): unknown {
+  const t = text.trim();
+  if (!t) return [];
+  try {
+    return JSON.parse(t);
+  } catch {}
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) {
+    try {
+      return JSON.parse(fence[1]!);
+    } catch {}
+  }
+  // Whichever bracket comes first wins: an array of objects, or an object with arrays inside.
+  const spans = [
+    [t.indexOf('['), t.lastIndexOf(']')],
+    [t.indexOf('{'), t.lastIndexOf('}')],
+  ]
+    .filter(([a, b]) => a! !== -1 && b! > a!)
+    .sort((x, y) => x[0]! - y[0]!);
+  for (const [a, b] of spans) {
+    try {
+      return JSON.parse(t.slice(a, b! + 1));
+    } catch {}
+  }
+  throw new Error('not valid JSON');
 }
 
 export function loadRun(runDir: string) {

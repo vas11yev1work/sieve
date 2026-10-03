@@ -78,6 +78,19 @@
         "tools": { "type": "array", "items": { "type": "string" }, "default": ["Read", "Grep", "Glob"] }
       }
     },
+    "map": {
+      "type": "object",
+      "description": "PR map (\"how it works\" tab): flows of the changed code as a graph.",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": ["on-demand", "always", "off"],
+          "description": "on-demand = build from a button in the UI; always = build together with the review; off = no map tab.",
+          "default": "on-demand"
+        },
+        "model": { "type": "string", "description": "haiku | sonnet | opus", "default": "sonnet" }
+      }
+    },
     "server": {
       "type": "object",
       "additionalProperties": false,

@@ -1,14 +1,15 @@
 import { Hono, type Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, extname, dirname } from 'node:path';
-import type { Finding, FindingState, RunMeta, RunState, Settings } from '../shared/types.ts';
+import { join, extname, dirname, resolve, sep } from 'node:path';
+import type { ChatThread, Finding, FindingState, RunMeta, RunState, Settings } from '../shared/types.ts';
 import { loadSettings, languageName } from '../cli/lib/settings.ts';
 import { paths, readJson, writeJson, loadRun } from '../cli/lib/run.ts';
 import { hunksAround } from '../cli/lib/diff.ts';
 import { sh, has } from '../cli/lib/sh.ts';
 import { runClaude, claudeAvailable } from './claude.ts';
 import { buildReview, postReview, exportMarkdown, type ReviewEvent } from './publish.ts';
+import { mapRoutes } from './map.ts';
 
 export interface ServerOptions {
   runDir: string;
@@ -55,6 +56,21 @@ function openBrowser(url: string) {
   } catch {}
 }
 
+export interface ThreadTurn {
+  /** Only one answer at a time per key. */
+  key: string;
+  thread: ChatThread;
+  /** Context sent with the first message of the thread. */
+  context: () => string;
+  /** What is sent to Claude. */
+  text: string;
+  /** Store `text` as the user's chat message. */
+  record: boolean;
+  langNote: string;
+  /** Turns the answer into the stored assistant message (+ extra fields for the `done` event). */
+  finish?: (answer: string) => { text: string; kind: 'chat' | 'comment'; extra?: Record<string, unknown> };
+}
+
 function stripFence(s: string): string {
   const m = s.trim().match(/^```(?:markdown|md)?\n([\s\S]*?)\n```$/);
   return m ? m[1]!.trim() : s.trim();
@@ -83,14 +99,20 @@ export function createApp(o: ServerOptions) {
   const fstate = (id: string): FindingState => (state.findings[id] ??= { status: 'open', messages: [] });
   const rules = readJson<{ path: string; scope: string }[]>(P.rules, []);
 
-  function snippet(f: Finding, pad = 6) {
-    const file = join(meta.worktree, f.file);
-    if (!existsSync(file)) return null;
-    const all = readFileSync(file, 'utf8').split('\n');
-    const start = Math.max(1, f.line - pad);
-    const end = Math.min(all.length, (f.endLine || f.line) + pad);
+  /** Lines around [line, endLine] of a worktree file; null when the path is outside the worktree or missing. */
+  function snippet(file: string, line: number, endLine?: number, pad = 6) {
+    const abs = resolve(meta.worktree, file);
+    if (!abs.startsWith(meta.worktree + sep) || !existsSync(abs)) return null;
+    const all = readFileSync(abs, 'utf8').split('\n');
+    const start = Math.max(1, line - pad);
+    const end = Math.min(all.length, (endLine || line) + pad);
     return { start, lines: all.slice(start - 1, end) };
   }
+
+  const code = (file: string, line: number, endLine?: number) => ({
+    hunks: hunksAround(files, file, line, endLine),
+    snippet: snippet(file, line, endLine),
+  });
 
   function findingContext(f: Finding): string {
     const s = settings();
@@ -123,38 +145,48 @@ export function createApp(o: ServerOptions) {
       .join('\n');
   }
 
-  /** One turn with Claude in the finding's own session. */
-  async function turn(
-    f: Finding,
-    kind: 'chat' | 'comment',
-    userText: string,
-    onText: (t: string) => void,
-    onTool: (t: string) => void,
-    signal: AbortSignal,
-  ) {
-    const st = fstate(f.id);
-    const s = settings();
-    const first = !st.sessionId;
-    const langNote =
-      kind === 'chat'
-        ? `(Reply in ${languageName(s.reportLanguage)}.)`
-        : `(Write the comment in ${languageName(s.commentLanguage)}, regardless of the language of our chat.)`;
-    const prompt = first ? `${findingContext(f)}\n\n---\n\n${userText}\n\n${langNote}` : `${userText}\n\n${langNote}`;
-    const addDirs = [runDir];
-    if (meta.repoRoot !== meta.worktree) addDirs.push(meta.repoRoot);
-    const res = await runClaude({
-      cwd: meta.worktree,
-      prompt,
-      model: s.chat.model,
-      tools: s.chat.tools,
-      addDirs,
-      resume: st.sessionId,
-      onText,
-      onTool,
-      signal,
+  /** One turn with Claude in the thread's own session, streamed as SSE (delta / tool / done / error). */
+  function streamThread(c: Context, o: ThreadTurn) {
+    if (busy.has(o.key)) return c.json({ error: 'Claude is already answering in this thread' }, 409);
+    const st = o.thread;
+    if (o.record) {
+      st.messages.push({ role: 'user', text: o.text, at: new Date().toISOString() });
+      save();
+    }
+    busy.add(o.key);
+    const ac = new AbortController();
+
+    return streamSSE(c, async (stream) => {
+      stream.onAbort(() => ac.abort());
+      try {
+        const s = settings();
+        const prompt = st.sessionId
+          ? `${o.text}\n\n${o.langNote}`
+          : `${o.context()}\n\n---\n\n${o.text}\n\n${o.langNote}`;
+        const addDirs = [runDir];
+        if (meta.repoRoot !== meta.worktree) addDirs.push(meta.repoRoot);
+        const res = await runClaude({
+          cwd: meta.worktree,
+          prompt,
+          model: s.chat.model,
+          tools: s.chat.tools,
+          addDirs,
+          resume: st.sessionId,
+          onText: (t) => void stream.writeSSE({ event: 'delta', data: JSON.stringify({ text: t }) }),
+          onTool: (t) => void stream.writeSSE({ event: 'tool', data: JSON.stringify({ label: t }) }),
+          signal: ac.signal,
+        });
+        if (res.sessionId) st.sessionId = res.sessionId;
+        const done = o.finish?.(res.text) ?? { text: res.text, kind: 'chat' as const };
+        st.messages.push({ role: 'assistant', text: done.text, at: new Date().toISOString(), kind: done.kind });
+        save();
+        await stream.writeSSE({ event: 'done', data: JSON.stringify({ state: st, ...done.extra }) });
+      } catch (e) {
+        await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: (e as Error).message }) });
+      } finally {
+        busy.delete(o.key);
+      }
     });
-    if (res.sessionId) st.sessionId = res.sessionId;
-    return res.text;
   }
 
   function commentInstruction(f: Finding): string {
@@ -210,7 +242,7 @@ export function createApp(o: ServerOptions) {
         state: meta.state,
         changedFiles: meta.changedFiles.length,
       },
-      settings: { reportLanguage: s.reportLanguage, commentLanguage: s.commentLanguage },
+      settings: { reportLanguage: s.reportLanguage, commentLanguage: s.commentLanguage, mapMode: s.map.mode },
       findings,
       state,
       capabilities: {
@@ -264,7 +296,15 @@ export function createApp(o: ServerOptions) {
   app.get('/api/findings/:id/context', (c) => {
     const f = byId(c.req.param('id'));
     if (!f) return c.json({ error: 'not found' }, 404);
-    return c.json({ hunks: hunksAround(files, f.file, f.line, f.endLine), snippet: snippet(f) });
+    return c.json(code(f.file, f.line, f.endLine));
+  });
+
+  app.get('/api/code', (c) => {
+    const file = c.req.query('file') || '';
+    const line = Math.max(1, Math.floor(Number(c.req.query('line')) || 1));
+    const endLine = Math.floor(Number(c.req.query('endLine'))) || undefined;
+    if (!file) return c.json({ error: 'file is required' }, 400);
+    return c.json(code(file, line, endLine));
   });
 
   app.post('/api/findings/:id/reset', (c) => {
@@ -277,60 +317,39 @@ export function createApp(o: ServerOptions) {
     return c.json(st);
   });
 
-  const streamTurn = (kind: 'chat' | 'comment') => async (c: Context) => {
+  const findingTurn = (kind: 'chat' | 'comment') => async (c: Context) => {
     const f = byId(c.req.param('id') ?? '');
     if (!f) return c.json({ error: 'not found' }, 404);
-    if (busy.has(f.id)) return c.json({ error: 'Claude is already answering for this finding' }, 409);
-    const body = kind === 'chat' ? await c.req.json() : {};
-    const text: string = kind === 'chat' ? String(body.message || '').trim() : commentInstruction(f);
+    const text = kind === 'chat' ? String((await c.req.json()).message || '').trim() : commentInstruction(f);
     if (!text) return c.json({ error: 'empty message' }, 400);
-
+    const s = settings();
     const st = fstate(f.id);
-    if (kind === 'chat') {
-      st.messages.push({ role: 'user', text, at: new Date().toISOString() });
-      save();
-    }
-    busy.add(f.id);
-    const ac = new AbortController();
-
-    return streamSSE(c, async (stream) => {
-      stream.onAbort(() => ac.abort());
-      try {
-        const answer = await turn(
-          f,
-          kind,
-          text,
-          (t) => void stream.writeSSE({ event: 'delta', data: JSON.stringify({ text: t }) }),
-          (t) => void stream.writeSSE({ event: 'tool', data: JSON.stringify({ label: t }) }),
-          ac.signal,
-        );
-        let out = answer;
-        if (kind === 'comment') {
-          out = stripFence(answer);
-          if (out.trim() === 'NO_COMMENT') out = '';
-          st.comment = out;
-        }
-        st.messages.push({
-          role: 'assistant',
-          text: kind === 'comment' ? out || '—' : out,
-          at: new Date().toISOString(),
-          kind,
-        });
-        save();
-        await stream.writeSSE({
-          event: 'done',
-          data: JSON.stringify({ state: st, noComment: kind === 'comment' && !out }),
-        });
-      } catch (e) {
-        await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: (e as Error).message }) });
-      } finally {
-        busy.delete(f.id);
-      }
+    return streamThread(c, {
+      key: f.id,
+      thread: st,
+      context: () => findingContext(f),
+      text,
+      record: kind === 'chat',
+      langNote:
+        kind === 'chat'
+          ? `(Reply in ${languageName(s.reportLanguage)}.)`
+          : `(Write the comment in ${languageName(s.commentLanguage)}, regardless of the language of our chat.)`,
+      finish:
+        kind === 'comment'
+          ? (answer) => {
+              let out = stripFence(answer);
+              if (out.trim() === 'NO_COMMENT') out = '';
+              st.comment = out;
+              return { text: out || '—', kind, extra: { noComment: !out } };
+            }
+          : undefined,
     });
   };
 
-  app.post('/api/findings/:id/chat', streamTurn('chat'));
-  app.post('/api/findings/:id/comment', streamTurn('comment'));
+  app.post('/api/findings/:id/chat', findingTurn('chat'));
+  app.post('/api/findings/:id/comment', findingTurn('comment'));
+
+  app.route('/', mapRoutes({ ...o, meta, files, findings, state, settings, save, streamThread }));
 
   app.get('/api/publish/preview', (c) => {
     const plan = buildReview(meta, findings, state, {

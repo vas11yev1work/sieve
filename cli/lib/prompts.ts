@@ -116,3 +116,7 @@ export function validatorModel(settings: Settings, f: Finding): string {
   if (m && m !== 'auto') return m;
   return ['bug', 'security'].includes(f.category) ? 'opus' : 'sonnet';
 }
+
+export function mapPrompt(sieveRoot: string, meta: RunMeta, settings: Settings, files: ParsedFile[]): string {
+  return render(template(sieveRoot, 'cartographer.md'), commonVars(meta, settings, files));
+}

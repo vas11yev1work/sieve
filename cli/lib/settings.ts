@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
   minSeverity: 'minor',
   chat: { model: 'sonnet', tools: ['Read', 'Grep', 'Glob'] },
   server: { port: 0, open: true },
+  map: { mode: 'on-demand', model: 'sonnet' },
   ignore: [
     '**/package-lock.json',
     '**/yarn.lock',

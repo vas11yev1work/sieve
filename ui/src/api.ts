@@ -1,4 +1,4 @@
-import type { Finding, FindingState, ParsedHunk, RunState } from '../../shared/types';
+import type { ChatThread, Finding, FindingState, MapStatus, ParsedHunk, RunState, Settings } from '../../shared/types';
 
 export interface RunData {
   meta: {
@@ -17,7 +17,7 @@ export interface RunData {
     state?: string;
     changedFiles: number;
   };
-  settings: { reportLanguage: string; commentLanguage: string };
+  settings: { reportLanguage: string; commentLanguage: string; mapMode: Settings['map']['mode'] };
   findings: Finding[];
   state: RunState;
   capabilities: { publish: boolean; chat: boolean };
@@ -48,6 +48,13 @@ async function json<T>(r: Response): Promise<T> {
 export const api = {
   run: () => fetch('/api/run').then((r) => json<RunData>(r)),
   context: (id: string) => fetch(`/api/findings/${id}/context`).then((r) => json<FindingContext>(r)),
+  code: (file: string, line: number, endLine?: number) =>
+    fetch(
+      `/api/code?${new URLSearchParams({ file, line: String(line), endLine: endLine ? String(endLine) : '' })}`,
+    ).then((r) => json<FindingContext>(r)),
+  map: () => fetch('/api/map').then((r) => json<MapStatus>(r)),
+  cancelMap: () => fetch('/api/map/cancel', { method: 'POST' }).then((r) => json<MapStatus>(r)),
+  resetThread: (url: string) => fetch(url, { method: 'POST' }).then((r) => json<ChatThread>(r)),
   patch: (id: string, body: Partial<FindingState> & { learn?: boolean }) =>
     fetch(`/api/findings/${id}`, {
       method: 'PATCH',
@@ -78,16 +85,17 @@ export const api = {
 export interface StreamHandlers {
   onDelta?: (text: string) => void;
   onTool?: (label: string) => void;
+  onProgress?: (label: string) => void;
 }
 
-/** POST + Server-Sent Events. Resolves with the `done` payload. */
+/** POST (or GET when `body` is null) + Server-Sent Events. Resolves with the `done` payload. */
 export async function stream<T>(url: string, body: unknown, h: StreamHandlers, signal?: AbortSignal): Promise<T> {
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body ?? {}),
-    signal,
-  });
+  const r = await fetch(
+    url,
+    body === null
+      ? { signal }
+      : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), signal },
+  );
   if (!r.ok || !r.body) {
     const data = await r.json().catch(() => ({}));
     throw new Error((data as { error?: string }).error || `HTTP ${r.status}`);
@@ -114,6 +122,7 @@ export async function stream<T>(url: string, body: unknown, h: StreamHandlers, s
       const payload = data ? JSON.parse(data) : {};
       if (event === 'delta') h.onDelta?.(payload.text);
       else if (event === 'tool') h.onTool?.(payload.label);
+      else if (event === 'progress') h.onProgress?.(payload.label);
       else if (event === 'done') result = payload;
       else if (event === 'error') error = payload.message;
     }

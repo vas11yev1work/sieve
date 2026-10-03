@@ -3,10 +3,22 @@ import { ref, watch, computed } from 'vue';
 import type { Finding } from '../../../shared/types';
 import { api, type FindingContext } from '../api';
 import { store } from '../store';
+import { findingRefs, showNode } from '../map';
 import { t } from '../i18n';
 import Markdown from './Markdown.vue';
 import DiffView from './DiffView.vue';
-import { Users, ShieldCheck, ShieldX, ExternalLink, BookOpen, Wrench, Code, TriangleAlert, Tag } from 'lucide-vue-next';
+import {
+  Users,
+  ShieldCheck,
+  ShieldX,
+  ExternalLink,
+  BookOpen,
+  Wrench,
+  Code,
+  TriangleAlert,
+  Tag,
+  Network,
+} from 'lucide-vue-next';
 
 const props = defineProps<{ finding: Finding }>();
 const ctx = ref<FindingContext | null>(null);
@@ -37,6 +49,7 @@ const fileLink = computed(() => {
 });
 
 const v = computed(() => props.finding.validation);
+const refs = computed(() => findingRefs.value.get(props.finding.id) || []);
 </script>
 
 <template>
@@ -68,6 +81,10 @@ const v = computed(() => props.finding.validation);
       <span v-else
         >{{ finding.file }}:{{ finding.line }}<template v-if="finding.endLine">–{{ finding.endLine }}</template></span
       >
+      <button v-if="refs.length" class="small on-map" @click="showNode(refs[0]!.flowId, refs[0]!.nodeId)">
+        <Network :size="13" /> {{ t.showOnMap }}
+      </button>
+      <span v-if="refs.length > 1" class="muted">{{ t.more(refs.length - 1) }}</span>
     </div>
 
     <div v-if="!finding.inDiff" class="notice"><TriangleAlert :size="15" /> {{ t.outsideDiff }}</div>
@@ -123,6 +140,15 @@ h2 {
 .loc {
   font-size: 12.5px;
   margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.on-map {
+  font-family: var(--sans);
+  padding: 2px 9px;
+  font-size: 12px;
 }
 .notice {
   display: flex;

@@ -92,8 +92,15 @@ export interface FindingState {
   published?: { at: string; url?: string };
 }
 
+/** A chat thread that is not tied to a finding (e.g. a map node: `map:<flowId>:<nodeId>`). */
+export interface ChatThread {
+  sessionId?: string;
+  messages: ChatMessage[];
+}
+
 export interface RunState {
   findings: Record<string, FindingState>;
+  threads?: Record<string, ChatThread>;
   settings?: { reportLanguage?: string; commentLanguage?: string };
   reviews?: { at: string; url?: string; count: number }[];
 }
@@ -119,6 +126,8 @@ export interface Settings {
   minSeverity: Severity;
   chat: { model: string; tools: string[] };
   server: { port: number; open: boolean };
+  /** PR map ("how it works" tab): when to build it and with which model. */
+  map: { mode: 'on-demand' | 'always' | 'off'; model: string };
   /** Glob patterns of files to exclude from review (lockfiles, generated code…). */
   ignore: string[];
 }
@@ -146,3 +155,85 @@ export interface ParsedFile {
   binary: boolean;
   hunks: ParsedHunk[];
 }
+
+// ───────────── PR map ─────────────
+
+export type MapNodeKind =
+  'entry' | 'component' | 'composable' | 'store' | 'service' | 'api' | 'router' | 'util' | 'external' | 'other';
+
+export const MAP_NODE_KINDS: MapNodeKind[] = [
+  'entry',
+  'component',
+  'composable',
+  'store',
+  'service',
+  'api',
+  'router',
+  'util',
+  'external',
+  'other',
+];
+
+export type MapChange = 'added' | 'modified' | 'removed' | 'unchanged';
+
+export interface MapNode {
+  /** Unique within its flow. */
+  id: string;
+  kind: MapNodeKind;
+  /** "ProductCard → click 'Add to cart'", "useCart().addItem" */
+  label: string;
+  /** Path relative to the repo root. */
+  file?: string;
+  line?: number;
+  endLine?: number;
+  symbol?: string;
+  /** What happens at this step, 1–2 sentences. */
+  summary: string;
+  change: MapChange;
+  /** What the PR changed here (when change != unchanged). */
+  changeSummary?: string;
+  /** Filled by the server when the map is served; agents never write it. */
+  findingIds?: string[];
+}
+
+export type MapEdgeKind = 'call' | 'event' | 'data' | 'async' | 'navigation';
+
+export interface MapEdge {
+  from: string;
+  to: string;
+  /** "emit('add')", "await addToCart mutation" */
+  label?: string;
+  kind?: MapEdgeKind;
+}
+
+export interface MapFlow {
+  /** slug */
+  id: string;
+  title: string;
+  description: string;
+  /** What starts the flow. */
+  trigger: string;
+  nodes: MapNode[];
+  edges: MapEdge[];
+}
+
+export interface PrMap {
+  version: 1;
+  createdAt: string;
+  model: string;
+  overview: {
+    /** 2–4 sentences: what the PR does and why. */
+    summary: string;
+    /** "Cart UI", "Cart store", "GraphQL: cart mutations" */
+    areas: string[];
+    /** 0–5 short architectural risks (not line-level bugs). */
+    risks: string[];
+  };
+  flows: MapFlow[];
+}
+
+export type MapStatus =
+  | { state: 'none' }
+  | { state: 'building'; startedAt: string; progress?: string }
+  | { state: 'ready'; map: PrMap }
+  | { state: 'error'; error: string };

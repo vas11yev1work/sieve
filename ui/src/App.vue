@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import {
   store,
   load,
@@ -18,6 +18,7 @@ import FindingList from './components/FindingList.vue';
 import FindingDetail from './components/FindingDetail.vue';
 import ChatPanel from './components/ChatPanel.vue';
 import PublishDialog from './components/PublishDialog.vue';
+import { mapStore, mapEnabled, prMap, loadMap, moveFlow, selectFlow, showNode } from './map';
 import {
   Funnel,
   GitBranch,
@@ -31,8 +32,13 @@ import {
   GitPullRequest,
   FileDiff,
   Power,
+  ListChecks,
+  Network,
 } from 'lucide-vue-next';
 import { api } from './api';
+
+// Vue Flow + dagre are heavy; load them only when the map tab is opened.
+const MapView = defineAsyncComponent(() => import('./components/MapView.vue'));
 
 const publishing = ref(false);
 const langOpen = ref(false);
@@ -94,11 +100,54 @@ async function finish() {
   store.error = t.value.stopped;
 }
 
+// URL hash: #review | #map (summary) | #map/<flowId>[/<nodeId>] (graph) — survives reloads and can be shared.
+let target: [string, string] | null = null;
+
+function applyHash() {
+  const [v, f = '', n = ''] = location.hash.replace(/^#/, '').split('/').map(decodeURIComponent);
+  if (v !== 'map' || !mapEnabled.value) {
+    store.view = 'review';
+    return;
+  }
+  store.view = 'map';
+  mapStore.tab = f ? 'graph' : 'summary';
+  if (f) target = [f, n];
+  applyTarget();
+}
+
+/** Select the flow/node from the hash once the map is there. */
+function applyTarget() {
+  const flow = target && prMap.value?.flows.find((x) => x.id === target![0]);
+  if (!flow || !target) return;
+  const n = target[1];
+  target = null;
+  if (flow.nodes.some((x) => x.id === n)) showNode(flow.id, n);
+  else selectFlow(flow.id);
+}
+
+const hash = computed(() =>
+  store.view === 'review'
+    ? '#review'
+    : mapStore.tab === 'summary'
+      ? '#map'
+      : '#' + ['map', mapStore.flowId, mapStore.nodeId].filter(Boolean).map(encodeURIComponent).join('/'),
+);
+
+function onMapKey(e: KeyboardEvent) {
+  if (e.code === 'BracketLeft') moveFlow(-1);
+  else if (e.code === 'BracketRight') moveFlow(1);
+  else if (e.key === 'Escape') mapStore.nodeId = '';
+  else if (e.code === 'KeyF') mapStore.fitTick++;
+  else return;
+  e.preventDefault();
+}
+
 function onKey(e: KeyboardEvent) {
   const el = e.target as HTMLElement;
   if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.isContentEditable))
     return;
   if (e.metaKey || e.ctrlKey || e.altKey || publishing.value) return;
+  if (store.view === 'map') return mapStore.tab === 'graph' ? onMapKey(e) : undefined;
   if (e.code === 'KeyJ' || e.key === 'ArrowDown') {
     move(1);
     e.preventDefault();
@@ -110,11 +159,19 @@ function onKey(e: KeyboardEvent) {
   else if (e.code === 'KeyG' && current.value) chat.value?.generate();
 }
 
-onMounted(() => {
-  load();
+onMounted(async () => {
   window.addEventListener('keydown', onKey);
+  await load();
+  await loadMap();
+  applyHash();
+  watch(prMap, applyTarget);
+  watch(hash, (h) => location.hash !== h && history.replaceState(null, '', h), { immediate: true });
+  window.addEventListener('hashchange', applyHash);
 });
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey);
+  window.removeEventListener('hashchange', applyHash);
+});
 </script>
 
 <template>
@@ -129,6 +186,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
         <Funnel :size="20" :stroke-width="2.25" class="logo" />
         <span>Sieve</span>
       </div>
+      <nav v-if="mapEnabled" class="views">
+        <button class="view" :class="{ active: store.view === 'review' }" @click="store.view = 'review'">
+          <ListChecks :size="15" /> {{ t.review }}
+        </button>
+        <button class="view" :class="{ active: store.view === 'map' }" @click="store.view = 'map'">
+          <Network :size="15" /> {{ t.map }}
+          <LoaderCircle v-if="mapStore.status?.state === 'building'" :size="13" class="spin" />
+        </button>
+      </nav>
       <div class="pr">
         <div class="title">
           <a v-if="store.run.meta.url" :href="store.run.meta.url" target="_blank" rel="noopener">
@@ -139,13 +205,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
           <span v-else><FileDiff :size="15" class="muted" /> {{ store.run.meta.title }}</span>
         </div>
         <div class="sub muted">
-          <span v-if="store.run.meta.owner">{{ store.run.meta.owner }}/{{ store.run.meta.repo }} · </span>
-          <span class="mono branch"
-            ><GitBranch :size="12" /> {{ store.run.meta.headRef }} <ArrowRight :size="12" />
-            {{ store.run.meta.baseRef }}</span
-          >
-          <span v-if="store.run.meta.author"> · @{{ store.run.meta.author }}</span>
-          · {{ store.run.meta.changedFiles }} {{ t.files }}
+          <template v-if="store.run.meta.owner">
+            <span>{{ store.run.meta.owner }}/{{ store.run.meta.repo }}</span>
+            <span class="dot">·</span>
+          </template>
+          <span class="mono branch">
+            <GitBranch :size="12" /> {{ store.run.meta.headRef }} <ArrowRight :size="12" />
+            {{ store.run.meta.baseRef }}
+          </span>
+          <template v-if="store.run.meta.author">
+            <span class="dot">·</span>
+            <span>@{{ store.run.meta.author }}</span>
+          </template>
+          <span class="dot">·</span>
+          <span>{{ store.run.meta.changedFiles }} {{ t.files }}</span>
           <span v-if="store.run.meta.isDraft" class="chip">{{ t.draft }}</span>
         </div>
       </div>
@@ -185,7 +258,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
       </div>
     </header>
 
-    <nav class="tabs">
+    <nav v-if="store.view === 'review'" class="tabs">
       <button
         v-for="tb in tabs"
         :key="tb.id"
@@ -210,7 +283,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
       <span class="muted shortcuts"><Keyboard :size="13" /> {{ t.shortcuts }}</span>
     </nav>
 
-    <main class="grid">
+    <main v-if="store.view === 'review'" class="grid">
       <aside class="col list-col">
         <FindingList />
       </aside>
@@ -222,6 +295,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
         <ChatPanel v-if="current" ref="chat" :finding="current" />
       </aside>
     </main>
+    <main v-else class="map-main"><MapView /></main>
 
     <PublishDialog v-if="publishing" @close="publishing = false" />
   </div>
@@ -232,6 +306,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .center {
   height: 100%;
@@ -258,6 +333,34 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
   font-weight: 700;
   font-size: 16px;
   letter-spacing: -0.01em;
+}
+.views {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--panel-2);
+  border-radius: 10px;
+}
+.view {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 7px;
+}
+.view.active {
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+.view.active:hover:not(:disabled) {
+  background: var(--panel);
+}
+.map-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 .pr {
   flex: 1;
@@ -288,10 +391,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
   gap: 4px;
 }
 .pr .sub {
+  /* one centered row: the branch (icon + mono text) and the plain-text parts share a center line */
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
+  line-height: 18px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+.pr .sub .dot {
+  opacity: 0.6;
 }
 .actions {
   display: flex;
