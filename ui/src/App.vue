@@ -20,7 +20,6 @@ import ChatPanel from './components/ChatPanel.vue';
 import PublishDialog from './components/PublishDialog.vue';
 import { mapStore, mapEnabled, prMap, loadMap, moveFlow, selectFlow, showNode } from './map';
 import {
-  Funnel,
   GitBranch,
   ArrowRight,
   Languages,
@@ -177,13 +176,13 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="store.loading" class="center muted"><LoaderCircle :size="22" class="spin" /></div>
   <div v-else-if="store.error" class="center error">
-    <div><CircleAlert :size="22" /> {{ store.error }}</div>
+    <div class="message"><CircleAlert :size="22" /> {{ store.error }}</div>
   </div>
 
   <div v-else-if="store.run" class="app">
     <header class="bar">
       <div class="brand">
-        <Funnel :size="20" :stroke-width="2.25" class="logo" />
+        <img src="/logo.svg" width="24" height="24" alt="" class="logo" />
         <span>Sieve</span>
       </div>
       <nav v-if="mapEnabled" class="views">
@@ -318,6 +317,11 @@ onBeforeUnmount(() => {
 .error {
   color: var(--danger);
 }
+.message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .bar {
   display: flex;
   align-items: center;
@@ -383,7 +387,7 @@ onBeforeUnmount(() => {
   max-width: 100%;
 }
 .logo {
-  color: var(--accent);
+  display: block;
 }
 .branch {
   display: inline-flex;
