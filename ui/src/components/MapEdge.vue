@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from '@vue-flow/core';
+import Markdown from './Markdown.vue';
 
 export interface MapEdgeData {
   label?: string;
@@ -72,7 +73,7 @@ const SHIFT = { center: '-50%', left: 'calc(-100% - 8px)', right: '8px' } as con
       :style="{ transform: `translate(${geo.x}px, ${geo.y}px) translate(${SHIFT[geo.align]}, -50%)` }"
       :title="data.label"
     >
-      {{ data.label }}
+      <Markdown inline :text="data.label" />
     </div>
   </EdgeLabelRenderer>
 </template>
@@ -91,5 +92,10 @@ const SHIFT = { center: '-50%', left: 'calc(-100% - 8px)', right: '8px' } as con
   color: var(--muted);
   font: 10.5px/1.5 var(--mono);
   pointer-events: all;
+}
+.edge-label :deep(code) {
+  background: transparent;
+  padding: 0;
+  font-size: 1em;
 }
 </style>

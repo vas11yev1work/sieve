@@ -2,6 +2,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import type { MapFlow } from '../../../shared/types';
 import { mapStore, prMap, currentFlow, currentNode, buildMap, cancelMap, selectFlow, sevCounts } from '../map';
+import Markdown from './Markdown.vue';
 import { t } from '../i18n';
 import MapGraph from './MapGraph.vue';
 import MapNodePanel from './MapNodePanel.vue';
@@ -89,8 +90,8 @@ function rebuild() {
           :class="{ active: f.id === mapStore.flowId }"
           @click="selectFlow(f.id)"
         >
-          <div class="title">{{ f.title }}</div>
-          <div class="desc muted">{{ f.description }}</div>
+          <div class="title"><Markdown inline :text="f.title" /></div>
+          <div class="desc muted"><Markdown inline :text="f.description" /></div>
           <div class="stats">
             <span v-if="changed(f)" class="chip chg">{{ changed(f) }} {{ t.changedCount }}</span>
             <span v-for="s in flowSevs(f)" :key="s.sev" class="sevn" :class="s.sev">{{ s.n }}</span>

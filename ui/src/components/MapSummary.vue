@@ -2,6 +2,7 @@
 import type { MapFlow, PrMap } from '../../../shared/types';
 import { openFlow, sevCounts } from '../map';
 import { t } from '../i18n';
+import Markdown from './Markdown.vue';
 import { TriangleAlert } from 'lucide-vue-next';
 
 /** The "read first" page of the map: what the PR does, where, what could go wrong, and its flows. */
@@ -14,21 +15,19 @@ const flowSevs = (f: MapFlow) => sevCounts(f.nodes.flatMap((n) => n.findingIds |
 <template>
   <div class="page scroll">
     <article class="doc">
-      <p class="lede">{{ map.overview.summary }}</p>
+      <p class="lede"><Markdown inline :text="map.overview.summary" /></p>
 
       <section v-if="map.overview.areas.length">
         <h3>{{ t.areas }}</h3>
         <div class="areas">
-          <span v-for="a in map.overview.areas" :key="a" class="chip">{{ a }}</span>
+          <span v-for="a in map.overview.areas" :key="a" class="chip"><Markdown inline :text="a" /></span>
         </div>
       </section>
 
       <section v-if="map.overview.risks.length">
         <h3>{{ t.risks }}</h3>
         <ul class="risks">
-          <li v-for="r in map.overview.risks" :key="r">
-            <TriangleAlert :size="15" /> <span>{{ r }}</span>
-          </li>
+          <li v-for="r in map.overview.risks" :key="r"><TriangleAlert :size="15" /> <Markdown inline :text="r" /></li>
         </ul>
       </section>
 
@@ -37,12 +36,12 @@ const flowSevs = (f: MapFlow) => sevCounts(f.nodes.flatMap((n) => n.findingIds |
         <ul class="flows">
           <li v-for="f in map.flows" :key="f.id">
             <button class="flow" :title="t.openGraph" @click="openFlow(f.id)">
-              <span class="ftitle">{{ f.title }}</span>
-              <span class="fdesc">{{ f.description }}</span>
+              <Markdown inline class="ftitle" :text="f.title" />
+              <Markdown inline class="fdesc" :text="f.description" />
               <span class="chain mono">
                 <template v-for="(n, i) in f.nodes" :key="n.id"
-                  ><span v-if="i" class="arrow"> → </span><span :class="n.change">{{ n.label }}</span></template
-                >
+                  ><span v-if="i" class="arrow"> → </span><Markdown inline :class="n.change" :text="n.label"
+                /></template>
               </span>
               <span class="stats">
                 <span v-if="changed(f)" class="chip chg">{{ changed(f) }} {{ t.changedCount }}</span>
@@ -81,6 +80,10 @@ h3 {
   margin: 0 0 12px;
   font-size: 15px;
   font-weight: 650;
+}
+.areas .chip :deep(code) {
+  background: transparent;
+  padding: 0;
 }
 .areas {
   display: flex;

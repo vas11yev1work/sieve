@@ -71,7 +71,7 @@ const refs = computed(() => findingRefs.value.get(props.finding.id) || []);
       </span>
     </div>
 
-    <h2>{{ finding.title }}</h2>
+    <h2><Markdown inline :text="finding.title" /></h2>
 
     <div class="loc mono">
       <a v-if="fileLink" :href="fileLink" target="_blank" rel="noopener"
@@ -95,7 +95,7 @@ const refs = computed(() => findingRefs.value.get(props.finding.id) || []);
       <div class="label">
         <BookOpen :size="12" /> {{ t.rule }} · <span class="mono">{{ finding.rule.path }}</span>
       </div>
-      {{ finding.rule.quote }}
+      <Markdown inline :text="finding.rule.quote" />
     </blockquote>
 
     <section v-if="finding.suggestion">

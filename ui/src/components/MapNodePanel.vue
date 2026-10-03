@@ -4,6 +4,7 @@ import type { MapFlow, MapNode } from '../../../shared/types';
 import { api, type FindingContext } from '../api';
 import { store, threadState, sendThread, resetThread } from '../store';
 import { KIND_ICONS, mapStore, nodeBase, nodeKey, showFinding, sevCounts } from '../map';
+import Markdown from './Markdown.vue';
 import { t } from '../i18n';
 import DiffView from './DiffView.vue';
 import ChatThread from './ChatThread.vue';
@@ -76,7 +77,7 @@ function pick(id: string) {
           t[node.change as 'added' | 'modified' | 'removed']
         }}</span>
       </div>
-      <h3>{{ node.label }}</h3>
+      <h3><Markdown inline :text="node.label" /></h3>
       <div v-if="loc(node)" class="loc mono">
         <a v-if="fileLink" :href="fileLink" target="_blank" rel="noopener"
           >{{ loc(node) }} <ExternalLink :size="12"
@@ -86,18 +87,18 @@ function pick(id: string) {
 
       <section v-if="node.summary">
         <h4>{{ t.whatHappens }}</h4>
-        <p>{{ node.summary }}</p>
+        <p><Markdown inline :text="node.summary" /></p>
       </section>
       <section v-if="node.changeSummary">
         <h4>{{ t.whatChanged }}</h4>
-        <p>{{ node.changeSummary }}</p>
+        <p><Markdown inline :text="node.changeSummary" /></p>
       </section>
 
       <section v-if="related.length">
         <h4>{{ t.stepFindings }}</h4>
         <button v-for="f in related" :key="f.id" class="finding" @click="showFinding(f.id)">
           <span class="sev" :class="f.severity">{{ f.severity }}</span>
-          <span class="ftitle">{{ f.title }}</span>
+          <Markdown inline class="ftitle" :text="f.title" />
         </button>
       </section>
 
@@ -109,11 +110,11 @@ function pick(id: string) {
 
     <!-- Details: the flow, when no step is selected -->
     <div v-else-if="tab === 'details'" class="body scroll">
-      <h3>{{ flow.title }}</h3>
-      <p class="muted">{{ flow.description }}</p>
+      <h3><Markdown inline :text="flow.title" /></h3>
+      <p class="muted"><Markdown inline :text="flow.description" /></p>
       <section v-if="flow.trigger">
         <h4>{{ t.trigger }}</h4>
-        <p>{{ flow.trigger }}</p>
+        <p><Markdown inline :text="flow.trigger" /></p>
       </section>
       <section>
         <h4>{{ t.steps }}</h4>
@@ -121,7 +122,7 @@ function pick(id: string) {
           <li v-for="n in flow.nodes" :key="n.id">
             <button class="step" :class="n.change" @click="pick(n.id)">
               <component :is="KIND_ICONS[n.kind]" :size="14" class="kind" />
-              <span class="slabel">{{ n.label }}</span>
+              <Markdown inline class="slabel" :text="n.label" />
               <span v-for="s in sevCounts(n.findingIds || [])" :key="s.sev" class="sevn" :class="s.sev">{{ s.n }}</span>
               <span v-if="n.change !== 'unchanged'" class="sign">{{ SIGN[n.change] }}</span>
             </button>

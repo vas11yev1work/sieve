@@ -338,3 +338,10 @@ kbd {
 .sevn.nit {
   --c: var(--sev-nit);
 }
+
+/* Code inside one-line texts (titles, summaries, labels) follows the size of the text around it. */
+.md-inline code {
+  font-size: 0.88em;
+  padding: 0 4px;
+  border-radius: 4px;
+}

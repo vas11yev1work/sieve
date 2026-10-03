@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import type { Finding } from '../../../shared/types';
 import { store, findingState, sendChat, generateComment, resetChat, update, selectNextAfter } from '../store';
+import Markdown from './Markdown.vue';
 import { t } from '../i18n';
 import ChatThread from './ChatThread.vue';
 import PanelTabs from './PanelTabs.vue';
@@ -160,7 +161,9 @@ const lastWasNoComment = computed(() => {
             <Check v-if="st.status === 'accepted'" :size="12" /><X v-else :size="12" />
             {{ st.status === 'accepted' ? t.accepted : t.rejected }}
           </span>
-          <span v-if="st.status === 'rejected' && st.rejectReason" class="muted small-text">{{ st.rejectReason }}</span>
+          <span v-if="st.status === 'rejected' && st.rejectReason" class="muted small-text"
+            ><Markdown inline :text="st.rejectReason"
+          /></span>
           <span class="grow" />
           <button class="ghost" @click="reopen"><RotateCcw :size="13" /> {{ t.reopen }}</button>
         </template>

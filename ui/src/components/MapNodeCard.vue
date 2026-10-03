@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
 import type { MapNode } from '../../../shared/types';
 import { KIND_ICONS, mapStore, sevCounts } from '../map';
+import Markdown from './Markdown.vue';
 
 /** A connection point for exactly one edge; `offset` (px) shifts it from the middle of its side. */
 export interface Port {
@@ -40,7 +41,7 @@ const SIGN = { added: '+', modified: '~', removed: '−', unchanged: '' } as con
       <span v-for="s in sevs" :key="s.sev" class="sevn" :class="s.sev">{{ s.n }}</span>
       <span v-if="n.change !== 'unchanged'" class="chg" :title="n.change">{{ SIGN[n.change] }}</span>
     </div>
-    <div class="label">{{ n.label }}</div>
+    <div class="label"><Markdown inline :text="n.label" /></div>
     <div v-if="n.file" class="loc mono">
       {{ n.file }}<template v-if="n.line">:{{ n.line }}</template>
     </div>

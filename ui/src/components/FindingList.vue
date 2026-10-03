@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { store, visible, findingState } from '../store';
+import Markdown from './Markdown.vue';
 import { t } from '../i18n';
 import { Check, MessageSquareText, LoaderCircle, Inbox } from 'lucide-vue-next';
 </script>
@@ -27,7 +28,7 @@ import { Check, MessageSquareText, LoaderCircle, Inbox } from 'lucide-vue-next';
           ><MessageSquareText :size="12"
         /></span>
       </div>
-      <div class="title">{{ f.title }}</div>
+      <div class="title"><Markdown inline :text="f.title" /></div>
       <div class="loc mono muted">
         {{ f.file }}:{{ f.line }}<template v-if="f.endLine">–{{ f.endLine }}</template>
       </div>

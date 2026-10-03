@@ -18,6 +18,7 @@ import FindingList from './components/FindingList.vue';
 import FindingDetail from './components/FindingDetail.vue';
 import ChatPanel from './components/ChatPanel.vue';
 import PublishDialog from './components/PublishDialog.vue';
+import Markdown from './components/Markdown.vue';
 import { mapStore, mapEnabled, prMap, loadMap, moveFlow, selectFlow, showNode } from './map';
 import {
   GitBranch,
@@ -199,9 +200,9 @@ onBeforeUnmount(() => {
           <a v-if="store.run.meta.url" :href="store.run.meta.url" target="_blank" rel="noopener">
             <GitPullRequest :size="15" class="muted" />
             <span v-if="store.run.meta.number" class="muted">#{{ store.run.meta.number }}</span>
-            {{ store.run.meta.title }}
+            <Markdown inline :text="store.run.meta.title" />
           </a>
-          <span v-else><FileDiff :size="15" class="muted" /> {{ store.run.meta.title }}</span>
+          <span v-else><FileDiff :size="15" class="muted" /> <Markdown inline :text="store.run.meta.title" /></span>
         </div>
         <div class="sub muted">
           <template v-if="store.run.meta.owner">
