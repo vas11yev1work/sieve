@@ -1,33 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { Finding } from '../../../shared/types';
-import {
-  store,
-  findingState,
-  sendChat,
-  generateComment,
-  stopStream,
-  resetChat,
-  update,
-  selectNextAfter,
-} from '../store';
+import { store, findingState, sendChat, generateComment, resetChat, update, selectNextAfter } from '../store';
 import { t } from '../i18n';
-import Markdown from './Markdown.vue';
-import {
-  MessageSquare,
-  Eraser,
-  Bot,
-  LoaderCircle,
-  Send,
-  Square,
-  Sparkles,
-  Check,
-  X,
-  RotateCcw,
-  ExternalLink,
-  PenLine,
-  CircleAlert,
-} from 'lucide-vue-next';
+import ChatThread from './ChatThread.vue';
+import PanelTabs from './PanelTabs.vue';
+import { Sparkles, Check, X, RotateCcw, ExternalLink, Eraser, LoaderCircle } from 'lucide-vue-next';
 
 const props = defineProps<{ finding: Finding }>();
 
@@ -36,25 +14,28 @@ const st = computed(() => findingState(id.value));
 const pending = computed(() => store.pending[id.value]);
 const canChat = computed(() => store.run?.capabilities.chat);
 
-const input = ref('');
 const draft = ref('');
 const rejecting = ref(false);
 const reason = ref('');
 const learn = ref(true);
-const log = ref<HTMLElement | null>(null);
-const commentBox = ref<HTMLTextAreaElement | null>(null);
+const tab = ref<'chat' | 'comment'>('chat');
+const tabs = computed(() => [
+  { id: 'chat' as const, label: t.value.chat, count: st.value.messages.length },
+  { id: 'comment' as const, label: t.value.comment },
+]);
+const commentPending = computed(() => pending.value?.kind === 'comment');
 
-const drafts = new Map<string, string>();
+function generate() {
+  tab.value = 'comment';
+  generateComment(id.value);
+}
 
 watch(
   id,
-  (n, o) => {
-    if (o) drafts.set(o, input.value);
-    input.value = drafts.get(n) || '';
+  () => {
     draft.value = st.value.comment || '';
     rejecting.value = false;
     reason.value = st.value.rejectReason || '';
-    scrollDown();
   },
   { immediate: true },
 );
@@ -66,32 +47,6 @@ watch(
     if (c !== undefined && c !== draft.value) draft.value = c;
   },
 );
-
-watch(
-  () => [st.value.messages.length, pending.value?.text],
-  () => scrollDown(),
-);
-
-function scrollDown() {
-  nextTick(() => {
-    if (log.value) log.value.scrollTop = log.value.scrollHeight;
-  });
-}
-
-function send() {
-  const m = input.value.trim();
-  if (!m || pending.value) return;
-  input.value = '';
-  drafts.delete(id.value);
-  sendChat(id.value, m);
-}
-
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-    e.preventDefault();
-    send();
-  }
-}
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function saveComment() {
@@ -125,7 +80,7 @@ function startReject() {
   rejecting.value = true;
 }
 
-defineExpose({ accept, startReject, generate: () => generateComment(id.value), focusChat: () => {} });
+defineExpose({ accept, startReject, generate });
 
 const lastWasNoComment = computed(() => {
   const m = st.value.messages[st.value.messages.length - 1];
@@ -135,66 +90,47 @@ const lastWasNoComment = computed(() => {
 
 <template>
   <div class="panel">
-    <div class="head">
-      <span class="label"><MessageSquare :size="12" /> {{ t.chat }}</span>
-      <button v-if="st.messages.length && !pending" class="ghost small" @click="resetChat(id)">
-        <Eraser :size="13" /> {{ t.resetChat }}
+    <PanelTabs v-model="tab" :tabs="tabs">
+      <button
+        v-if="tab === 'chat' && st.messages.length && !pending"
+        class="ghost reset"
+        :title="t.resetChat"
+        @click="resetChat(id)"
+      >
+        <Eraser :size="14" /> {{ t.resetChat }}
       </button>
-    </div>
+      <span v-else-if="tab === 'comment'" class="muted lang">{{ store.run?.settings.commentLanguage }}</span>
+    </PanelTabs>
 
-    <div ref="log" class="log scroll">
-      <div v-if="!canChat" class="hint danger-text"><CircleAlert :size="16" /> {{ t.chatUnavailable }}</div>
-      <div v-else-if="!st.messages.length && !pending" class="hint muted empty">
-        <Bot :size="26" :stroke-width="1.5" /> {{ t.chatEmpty }}
-      </div>
+    <ChatThread
+      v-if="tab === 'chat'"
+      :thread-key="id"
+      :messages="st.messages"
+      :placeholder="t.chatPlaceholder"
+      :empty="t.chatEmpty"
+      @send="(m) => sendChat(id, m)"
+    />
 
-      <div v-for="(m, i) in st.messages" :key="i" class="msg" :class="[m.role, m.kind]">
-        <div v-if="m.kind === 'comment'" class="tag"><PenLine :size="11" /> {{ t.comment }}</div>
-        <Markdown v-if="m.role === 'assistant'" :text="m.text" />
-        <div v-else class="plain">{{ m.text }}</div>
-      </div>
-
-      <div v-if="pending" class="msg assistant" :class="pending.kind">
-        <div v-if="pending.kind === 'comment'" class="tag"><PenLine :size="11" /> {{ t.comment }}</div>
-        <Markdown v-if="pending.text" :text="pending.text" />
-        <div class="status muted">
-          <LoaderCircle :size="13" class="spin" />
-          <span class="mono">{{ pending.tool || t.thinking }}</span>
-        </div>
-      </div>
-
-      <div v-if="store.errors[id]" class="error"><CircleAlert :size="14" /> {{ store.errors[id] }}</div>
-    </div>
-
-    <div class="composer">
-      <textarea v-model="input" rows="2" :placeholder="t.chatPlaceholder" :disabled="!canChat" @keydown="onKey" />
-      <div class="row">
-        <span class="grow" />
-        <button v-if="pending" class="danger" @click="stopStream(id)"><Square :size="13" /> {{ t.stop }}</button>
-        <button v-else class="primary" :disabled="!input.trim() || !canChat" @click="send">
-          <Send :size="14" /> {{ t.send }}
-        </button>
-      </div>
-    </div>
-
-    <div class="comment">
-      <div class="head">
-        <span class="label"><PenLine :size="12" /> {{ t.comment }} · {{ store.run?.settings.commentLanguage }}</span>
-        <button class="small" :disabled="!!pending || !canChat" @click="generateComment(id)">
-          <Sparkles :size="13" /> {{ draft ? t.regenerate : t.generate }}
-        </button>
-      </div>
-      <div v-if="lastWasNoComment" class="hint muted">{{ t.noCommentNeeded }}</div>
+    <div v-else class="comment scroll">
+      <p class="muted intro">{{ t.commentIntro }}</p>
+      <textarea v-if="commentPending" class="box" :value="pending!.text" readonly />
       <textarea
-        ref="commentBox"
+        v-else
         v-model="draft"
-        rows="5"
+        class="box"
         :placeholder="t.commentPlaceholder"
         :disabled="!!st.published"
         @input="onDraftInput"
         @blur="saveComment"
       />
+      <div v-if="lastWasNoComment" class="hint muted">{{ t.noCommentNeeded }}</div>
+      <button class="gen" :disabled="!!pending || !canChat || !!st.published" @click="generate">
+        <LoaderCircle v-if="commentPending" :size="14" class="spin" /><Sparkles v-else :size="14" />
+        {{ draft ? t.regenerate : t.generate }}
+      </button>
+    </div>
 
+    <footer class="actions">
       <div v-if="st.published" class="row">
         <span class="chip ok"><Check :size="12" /> {{ t.published }}</span>
         <a v-if="st.published.url" class="link" :href="st.published.url" target="_blank" rel="noopener"
@@ -216,6 +152,7 @@ const lastWasNoComment = computed(() => {
         <template v-if="st.status === 'open'">
           <button class="danger" @click="startReject"><X :size="14" /> {{ t.reject }}</button>
           <span class="grow" />
+          <span v-if="!draft.trim()" class="muted need">{{ t.needComment }}</span>
           <button class="ok" :disabled="!draft.trim()" @click="accept"><Check :size="14" /> {{ t.accept }}</button>
         </template>
         <template v-else>
@@ -228,7 +165,7 @@ const lastWasNoComment = computed(() => {
           <button class="ghost" @click="reopen"><RotateCcw :size="13" /> {{ t.reopen }}</button>
         </template>
       </div>
-    </div>
+    </footer>
   </div>
 </template>
 
@@ -239,138 +176,65 @@ const lastWasNoComment = computed(() => {
   height: 100%;
   min-height: 0;
 }
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 16px 8px;
-}
-.comment .head {
-  padding: 0 0 8px;
-}
-.label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  font-weight: 600;
-}
-button.small {
-  padding: 3px 10px;
+.reset {
+  padding: 4px 8px;
   font-size: 12.5px;
 }
-.log {
+.lang {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.comment {
   flex: 1;
-  min-height: 120px;
-  padding: 4px 16px 12px;
+  min-height: 0;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+.intro {
+  margin: 0;
+  font-size: 13px;
+}
+.box {
+  /* fixed height: ten lines of the comment, scrolls inside */
+  height: calc(10 * 1.55em + 18px);
+  flex-shrink: 0;
+  resize: none;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.gen {
+  align-self: flex-start;
+}
 .hint {
   font-size: 13px;
-  padding: 8px 0;
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
 }
-.hint.empty {
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 24px 8px;
+.actions {
+  flex-shrink: 0;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
 }
 .link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.danger-text {
-  color: var(--danger);
-}
-.msg {
-  max-width: 92%;
-  padding: 9px 12px;
-  border-radius: 12px;
-  font-size: 13.5px;
-  word-wrap: break-word;
-}
-.msg.user {
-  align-self: flex-end;
-  background: var(--accent);
-  color: var(--accent-text);
-  border-bottom-right-radius: 4px;
-}
-.msg.user .plain {
-  white-space: pre-wrap;
-}
-.msg.assistant {
-  align-self: flex-start;
-  background: var(--panel-2);
-  border-bottom-left-radius: 4px;
-}
-.msg.comment {
-  border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
-  background: var(--accent-weak);
-}
-.tag {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-.status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  margin-top: 4px;
-}
-.error {
-  display: flex;
-  gap: 6px;
-  color: var(--danger);
-  background: var(--danger-weak);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 12.5px;
-  white-space: pre-wrap;
-}
-.composer {
-  padding: 8px 16px 12px;
-  border-bottom: 1px solid var(--border);
-}
-.composer textarea {
-  min-height: 52px;
-}
 .row {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.reject .row {
   margin-top: 8px;
 }
 .grow {
   flex: 1;
 }
-.comment {
-  padding: 12px 16px 16px;
-  background: var(--panel);
-}
-.comment textarea {
-  font-family: var(--mono);
-  font-size: 12.5px;
-}
-.reject input[type='text'] {
-  margin-top: 8px;
+.need {
+  font-size: 12px;
 }
 .check {
   display: flex;

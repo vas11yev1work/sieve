@@ -1,11 +1,13 @@
 import { reactive, computed } from 'vue';
-import type { Finding, FindingState, FindingStatus } from '../../shared/types';
+import type { ChatThread, Finding, FindingState, FindingStatus } from '../../shared/types';
 import { api, stream, type RunData } from './api';
 import { uiLang } from './i18n';
 
 export type Tab = FindingStatus | 'filtered' | 'all';
 /** Category filter on top of the status tabs: quality findings vs everything else. */
 export type Kind = 'all' | 'issues' | 'quality';
+/** Top-level tab. */
+export type View = 'review' | 'map';
 
 interface Pending {
   kind: 'chat' | 'comment';
@@ -18,9 +20,11 @@ export const store = reactive({
   loading: true,
   error: '',
   run: null as RunData | null,
+  view: 'review' as View,
   tab: 'open' as Tab,
   kind: 'all' as Kind,
   selected: '' as string,
+  /** Keyed by thread: a finding id or `map:<flowId>:<nodeId>`. */
   pending: {} as Record<string, Pending>,
   errors: {} as Record<string, string>,
 });
@@ -46,6 +50,12 @@ export async function load() {
 
 export const findingState = (id: string): FindingState =>
   store.run?.state.findings[id] || { status: 'open', messages: [] };
+
+export const threadState = (key: string): ChatThread => store.run?.state.threads?.[key] || { messages: [] };
+
+function setThread(key: string, s: ChatThread) {
+  if (store.run) (store.run.state.threads ??= {})[key] = s;
+}
 
 function matchesKind(f: Finding, kind: Kind) {
   return kind === 'all' || (kind === 'quality') === (f.category === 'quality');
@@ -110,59 +120,92 @@ export function move(delta: number) {
   if (n) store.selected = n.id;
 }
 
-async function runStream(id: string, kind: 'chat' | 'comment', message?: string) {
-  if (store.pending[id]) return;
+/** One streamed answer in a thread; `get`/`set` read and replace the thread's state. */
+async function runStream<S extends ChatThread>(
+  key: string,
+  url: string,
+  kind: 'chat' | 'comment',
+  message: string | undefined,
+  get: () => S,
+  set: (s: S) => void,
+) {
+  if (store.pending[key]) return;
   const abort = new AbortController();
-  store.errors[id] = '';
+  store.errors[key] = '';
   if (kind === 'chat' && message) {
     // optimistic user message
-    const st = findingState(id);
-    setState(id, { ...st, messages: [...st.messages, { role: 'user', text: message, at: new Date().toISOString() }] });
+    const st = get();
+    set({ ...st, messages: [...st.messages, { role: 'user', text: message, at: new Date().toISOString() }] });
   }
-  store.pending[id] = { kind, text: '', abort };
+  store.pending[key] = { kind, text: '', abort };
   try {
-    const res = await stream<{ state: FindingState; noComment?: boolean }>(
-      `/api/findings/${id}/${kind}`,
+    const res = await stream<{ state: S; noComment?: boolean }>(
+      url,
       kind === 'chat' ? { message } : {},
       {
         onDelta: (t) => {
-          const p = store.pending[id];
+          const p = store.pending[key];
           if (p) {
             p.text += t;
             p.tool = undefined;
           }
         },
         onTool: (label) => {
-          const p = store.pending[id];
+          const p = store.pending[key];
           if (p) p.tool = label;
         },
       },
       abort.signal,
     );
-    setState(id, res.state);
+    set(res.state);
   } catch (e) {
     const msg = (e as Error).message;
-    if (!/abort/i.test(msg)) store.errors[id] = msg;
+    if (!/abort/i.test(msg)) store.errors[key] = msg;
     // resync with server (the user message was saved there)
     try {
       const fresh = await api.run();
       if (store.run) store.run.state = fresh.state;
     } catch {}
   } finally {
-    delete store.pending[id];
+    delete store.pending[key];
   }
 }
 
-export const sendChat = (id: string, message: string) => runStream(id, 'chat', message);
-export const generateComment = (id: string) => runStream(id, 'comment');
-export const stopStream = (id: string) => store.pending[id]?.abort.abort();
+const findingStream = (id: string, kind: 'chat' | 'comment', message?: string) =>
+  runStream(
+    id,
+    `/api/findings/${id}/${kind}`,
+    kind,
+    message,
+    () => findingState(id),
+    (s) => setState(id, s),
+  );
+
+export const sendChat = (id: string, message: string) => findingStream(id, 'chat', message);
+export const generateComment = (id: string) => findingStream(id, 'comment');
+export const stopStream = (key: string) => store.pending[key]?.abort.abort();
 
 export async function resetChat(id: string) {
   setState(id, await api.reset(id));
 }
 
+/** Chat in a non-finding thread; `base` is its API path (…/chat and …/reset live under it). */
+export const sendThread = (key: string, base: string, message: string) =>
+  runStream(
+    key,
+    `${base}/chat`,
+    'chat',
+    message,
+    () => threadState(key),
+    (s) => setThread(key, s),
+  );
+
+export async function resetThread(key: string, base: string) {
+  setThread(key, await api.resetThread(`${base}/reset`));
+}
+
 export async function setLanguages(body: { reportLanguage?: string; commentLanguage?: string; persist?: boolean }) {
   const s = await api.settings(body);
-  if (store.run) store.run.settings = s;
+  if (store.run) store.run.settings = { ...store.run.settings, ...s };
   uiLang.value = langCode(s.reportLanguage);
 }

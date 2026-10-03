@@ -22,6 +22,13 @@
   --del-fg: #a42626;
   --hl-bg: #fff4c2;
   --code-bg: #f6f6f9;
+  --chg-added: #1f8f4e;
+  --chg-modified: #c27a00;
+  --chg-removed: #d93a3a;
+  --edge: #a3a3b4;
+  --map-bg: #f3f3f7;
+  --map-dots: #d3d3de;
+  --step-bg: #f6f6f9;
   --sh-keyword: #a626a4;
   --sh-string: #50a14f;
   --sh-comment: #a0a1a7;
@@ -62,6 +69,13 @@
     --del-fg: #ff9b9b;
     --hl-bg: #3d3514;
     --code-bg: #14141a;
+    --chg-added: #3ccf7a;
+    --chg-modified: #f0b03c;
+    --chg-removed: #ff6464;
+    --edge: #5c5c70;
+    --map-bg: #131319;
+    --map-dots: #2e2e3b;
+    --step-bg: #20202a;
     --sh-keyword: #c678dd;
     --sh-string: #98c379;
     --sh-comment: #7f848e;
@@ -293,4 +307,34 @@ kbd {
   border: 1px solid var(--border);
   border-bottom-width: 2px;
   border-radius: 4px;
+}
+
+/* Severity counter: colored dot + number. */
+.sevn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.sevn::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.sevn.critical {
+  --c: var(--sev-critical);
+}
+.sevn.major {
+  --c: var(--sev-major);
+}
+.sevn.minor {
+  --c: var(--sev-minor);
+}
+.sevn.nit {
+  --c: var(--sev-nit);
 }

@@ -9,6 +9,8 @@ Point it at a GitHub PR (or your local branch). Several reviewer agents check it
 - generate a short PR comment (in the language you choose, with a ```suggestion block when the fix is trivial),
 - publish everything as **one** GitHub review, inline where possible.
 
+A second tab, **Map**, shows how the code the PR touches actually works — the flows it is part of, as a graph — so you understand the change before you look at what's wrong with it.
+
 Nothing is posted until you press **Publish**.
 
 ```
@@ -30,6 +32,7 @@ prepare ──► reviewers (parallel) ──► merge ──► validators (par
 | candidates | CLI               | Normalizes paths, drops findings outside changed files or below `minSeverity`, computes where an inline comment can be anchored.                                                                             |
 | validate   | subagents         | One skeptical validator per finding (opus for bugs/security, sonnet for rules by default). Rejected / low-confidence findings go to the _Filtered out_ tab.                                                  |
 | UI         | `server/` + `ui/` | Local server on `127.0.0.1`. Per-finding chat runs `claude -p` with `--resume`, read-only tools (`Read`, `Grep`, `Glob`), cwd = the PR worktree.                                                             |
+| map        | subagent / server | Optional. A cartographer agent traces the flows the PR touches through the real code; the map is normalized against the diff and opens in the **Map** tab. See [PR map](#pr-map).                            |
 | publish    | `gh api`          | `POST /repos/{o}/{r}/pulls/{n}/reviews` with `commit_id` = PR head. Findings outside the diff go into the review body with permalinks.                                                                       |
 
 The pipeline is the same idea as Anthropic's official `code-review` plugin (independent parallel reviewers + per-issue validation), with your rules, your language and a human in the loop before anything is posted.
@@ -80,7 +83,33 @@ Run data lives in `<repo>/.sieve/runs/` and is excluded from git automatically (
 
 ### UI shortcuts
 
-`j`/`k` — next/previous finding · `a` — accept · `r` — reject · `g` — generate comment · `Enter` — send chat message
+Review: `j`/`k` — next/previous finding · `a` — accept · `r` — reject · `g` — generate comment · `Enter` — send chat message
+
+Map: `[`/`]` — previous/next flow · `Esc` — deselect the step · `f` — fit the graph
+
+The current tab, flow and step live in the URL (`#review`, `#map/<flow>/<step>`), so reloads and links keep your place.
+
+## PR map
+
+<!-- screenshot: docs/map.png -->
+
+The **Map** tab answers "how does this work?" before the review answers "what's wrong?":
+
+- **Overview** — what the PR does and why, the affected areas, and a few architectural risks.
+- **Flows** — 1–5 scenarios the PR takes part in ("add a product to the cart", "app start", or "how module X works" for refactorings), each a graph of real steps: trigger → component → composable → store → API → …
+- **Steps** point to real files and lines. Steps changed by the PR are highlighted (`+` added, `~` modified, `−` removed — checked against the diff, not taken on the agent's word), unchanged steps are dimmed.
+- **Findings** of the review show up as badges on the steps they fall into; click through from a step to the finding and back ("Show on map").
+- **Chat per step** — ask Claude how the step works and how the change affects it (same read-only tools as the finding chat).
+
+When the map is built is set by `map.mode`:
+
+| Mode                  | What happens                                                                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------------- |
+| `on-demand` (default) | The tab offers a **Build map** button. The build runs on the server; closing the tab doesn't stop it. |
+| `always`              | The skill runs the cartographer in parallel with the reviewers; the map is ready when the UI opens.   |
+| `off`                 | No map tab.                                                                                           |
+
+"Rebuild" replaces the map and resets the step chats. Nothing from the map is ever posted to GitHub.
 
 ## Configuration
 
@@ -113,6 +142,7 @@ Languages can also be switched in the UI (languages button in the header); "save
   "minSeverity": "minor", // critical | major | minor | nit
   "validation": { "enabled": true, "model": "auto", "minConfidence": 0.6 },
   "chat": { "model": "sonnet", "tools": ["Read", "Grep", "Glob"] },
+  "map": { "mode": "on-demand", "model": "sonnet" }, // on-demand | always | off
   "server": { "port": 0, "open": true },
 }
 ```
@@ -156,6 +186,7 @@ The skill drives the CLI, but you can use it directly:
 bun cli/sieve.ts prepare [PR] [--base ref] [--lang l] [--comment-lang l] [--only a,b] [--skip a,b] [--min-severity s] [--force]
 bun cli/sieve.ts candidates <runDir>  < findings.json
 bun cli/sieve.ts finalize <runDir>    < verdicts.json
+bun cli/sieve.ts map <runDir>         < map.json        # normalize the cartographer's output into map.json
 bun cli/sieve.ts serve <runDir> [--port n] [--no-open] [--detach]
 bun cli/sieve.ts runs
 ```
@@ -164,7 +195,7 @@ bun cli/sieve.ts runs
 
 ```
 bun install
-bun test                      # unit tests (diff parsing, anchors, review payload)
+bun test                      # unit tests (diff parsing, anchors, review payload, map normalization)
 bun run typecheck
 bun run build                 # build the UI into ui/dist
 bun cli/sieve.ts serve <runDir> --port 4545 --no-open
@@ -173,11 +204,13 @@ bun run dev:ui                # Vite dev server, proxies /api to :4545 (or $SIEV
 
 Try the plugin without installing: `claude --plugin-dir /path/to/sieve`, then `/sieve:review`.
 
+Server API (used by the UI): `GET /api/run`, `PATCH /api/findings/:id`, `POST /api/findings/:id/{chat,comment,reset}` (SSE for chat/comment), `GET /api/findings/:id/context`, `GET /api/code?file=&line=&endLine=`, `GET /api/map`, `POST /api/map/build` (SSE), `GET /api/map/progress` (SSE), `POST /api/map/cancel`, `POST /api/map/nodes/:flowId/:nodeId/{chat,reset}`, `GET /api/publish/preview`, `POST /api/publish`, `GET /api/export`.
+
 ```
 .claude-plugin/        plugin + marketplace manifests
 skills/review/         SKILL.md (orchestrator), reviewers/, templates/
 cli/                   prepare / candidates / finalize / serve
-server/                Hono API: findings, per-finding Claude chat (SSE), GitHub publish
+server/                Hono API: findings, chat threads (SSE), PR map builds, GitHub publish
 ui/                    Vue 3 + Vite UI
 shared/types.ts        types shared by all of the above
 schema/                JSON schema for settings

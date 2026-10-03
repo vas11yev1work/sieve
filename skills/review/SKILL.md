@@ -33,7 +33,7 @@ It prints JSON. Then:
 - `stop` is set → tell the user the reason (in their language) and stop.
 - `isDraft: true` → mention it in one line and continue.
 
-Remember `runDir`, `reviewers`, `reportLanguage`.
+Remember `runDir`, `reviewers`, `reportLanguage` and `map` (present only when the map is built together with the review).
 
 ## 2. Run reviewers in parallel
 
@@ -45,6 +45,15 @@ In ONE message, launch one Task per entry in `reviewers` (they must run in paral
 - `prompt`:
   > Read the file `<prompt>` and follow its instructions exactly. Use only read-only tools.
   > Your final message must be ONLY the JSON array described there — no prose, no code fences.
+
+If the `prepare` output has `map`, launch the cartographer **in the same message**, in parallel with the reviewers:
+
+- `subagent_type`: `general-purpose`, `model`: `map.model`, `description`: `Sieve: map`
+- `prompt`:
+  > Read the file `<map.prompt>` and follow its instructions exactly. Use only read-only tools.
+  > Your final message must be ONLY the JSON object described there — no prose, no code fences.
+
+The cartographer does not take part in merging or validation — keep its answer for step 4.
 
 ## 3. Merge and register candidates
 
@@ -83,6 +92,15 @@ SIEVE_JSON
 
 If `validate` is empty (validation disabled or no candidates), run `finalize` with `[]`.
 
+If you launched the cartographer, save its map (skip this if it failed or returned nothing — the user can
+build the map from the UI):
+
+```bash
+bun "$SIEVE/cli/sieve.ts" map "<runDir>" <<'SIEVE_JSON'
+{ ...cartographer's JSON object... }
+SIEVE_JSON
+```
+
 ## 5. Open the UI
 
 ```bash
@@ -96,4 +114,6 @@ browser and prints `{ "url": … }`.
 
 Reply in `reportLanguage`, briefly: how many findings by severity, how many were filtered out by
 validation, which reviewers failed (if any), and the UI link. Remind the user that nothing is posted
-until they press "Publish" in the UI. Do not list the findings in detail — they are in the UI.
+until they press "Publish" in the UI. Unless `mapMode` is `off`, mention the "Map" tab: it shows how the changed code works as a graph
+of flows (already built if the cartographer ran, otherwise one click on "Build map"). Do not list the findings
+in detail — they are in the UI.

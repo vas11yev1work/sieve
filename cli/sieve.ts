@@ -6,6 +6,7 @@
  *   sieve prepare [PR url | owner/repo#n | n] [--base <ref>] [--lang <l>] [--comment-lang <l>] [--only <a,b>] [--skip <a,b>] [--min-severity <s>] [--force]
  *   sieve candidates <runDir>    < merged reviewer findings (JSON array)
  *   sieve finalize <runDir>      < validator verdicts (JSON array, optional)
+ *   sieve map <runDir>           < cartographer output (JSON object) → map.json
  *   sieve serve <runDir> [--port <n>] [--no-open]
  *   sieve runs                   list runs of the current repo
  */
@@ -32,8 +33,9 @@ import {
 import { parseDiff, anchorFor } from './lib/diff.ts';
 import { discoverRules, isIgnored } from './lib/rules.ts';
 import { loadReviewers } from './lib/reviewers.ts';
-import { reviewerPrompt, validatorPrompt, validatorModel, diffStats } from './lib/prompts.ts';
-import { paths, readJson, writeJson, loadRun } from './lib/run.ts';
+import { reviewerPrompt, validatorPrompt, validatorModel, diffStats, mapPrompt } from './lib/prompts.ts';
+import { normalizeMap, parseMapOutput } from './lib/map.ts';
+import { paths, readJson, writeJson, loadRun, parseJsonLoose } from './lib/run.ts';
 
 export const SIEVE_ROOT = resolve(dirname(import.meta.path), '..');
 
@@ -49,25 +51,6 @@ function die(msg: string): never {
 async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return '';
   return await new Response(Bun.stdin.stream()).text();
-}
-
-/** Accept a JSON array, or text containing one (agents sometimes wrap output in prose/fences). */
-function parseJsonLoose(text: string): unknown {
-  const t = text.trim();
-  if (!t) return [];
-  try {
-    return JSON.parse(t);
-  } catch {}
-  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) {
-    try {
-      return JSON.parse(fence[1]!);
-    } catch {}
-  }
-  const a = t.indexOf('[');
-  const b = t.lastIndexOf(']');
-  if (a !== -1 && b > a) return JSON.parse(t.slice(a, b + 1));
-  throw new Error('stdin is not valid JSON');
 }
 
 function splitPatch(patch: string): { path: string; text: string }[] {
@@ -227,7 +210,7 @@ async function prepare(argv: string[]) {
   const p = paths(meta.runDir);
   mkdirSync(meta.runDir, { recursive: true });
   rmSync(p.prompts, { recursive: true, force: true });
-  for (const f of [p.candidates, p.findings, p.state]) rmSync(f, { force: true });
+  for (const f of [p.candidates, p.findings, p.state, p.map]) rmSync(f, { force: true });
   writeFileSync(p.patch, patch);
   writeJson(p.diff, files);
   writeJson(p.meta, meta);
@@ -242,6 +225,12 @@ async function prepare(argv: string[]) {
     writeFileSync(file, reviewerPrompt(SIEVE_ROOT, meta, settings, files, rules, r));
     return { name: r.name, model: r.model, description: r.description, prompt: file };
   });
+
+  let map: { model: string; prompt: string } | undefined;
+  if (settings.map.mode === 'always') {
+    writeFileSync(p.mapPrompt, mapPrompt(SIEVE_ROOT, meta, settings, files));
+    map = { model: settings.map.model, prompt: p.mapPrompt };
+  }
 
   const stats = diffStats(files);
   let stop: string | undefined;
@@ -261,8 +250,10 @@ async function prepare(argv: string[]) {
     deletions: stats.deletions,
     reportLanguage: settings.reportLanguage,
     commentLanguage: settings.commentLanguage,
+    mapMode: settings.map.mode,
     rules: rules.map((r) => r.path),
     reviewers: plan,
+    ...(map ? { map } : {}),
     ...(stop ? { stop } : {}),
   });
 }
@@ -406,6 +397,17 @@ async function finalize(argv: string[]) {
   });
 }
 
+// ───────────────────────────── map ─────────────────────────────
+
+async function map(argv: string[]) {
+  const runDir = resolve(argv[0] || die('usage: sieve map <runDir> < map.json'));
+  const { meta, files } = loadRun(runDir);
+  const settings = loadSettings(meta.repoRoot, meta.overrides);
+  const m = normalizeMap(parseMapOutput(await readStdin()), meta, files, settings);
+  writeJson(paths(runDir).map, m);
+  out({ flows: m.flows.length, nodes: m.flows.reduce((n, f) => n + f.nodes.length, 0) });
+}
+
 // ───────────────────────────── serve / runs ─────────────────────────────
 
 async function serve(argv: string[]) {
@@ -517,6 +519,9 @@ try {
     case 'finalize':
       await finalize(rest);
       break;
+    case 'map':
+      await map(rest);
+      break;
     case 'serve':
       await serve(rest);
       break;
@@ -525,10 +530,11 @@ try {
       break;
     default:
       process.stdout.write(
-        'usage: sieve <prepare|candidates|finalize|serve|runs> …\n' +
+        'usage: sieve <prepare|candidates|finalize|map|serve|runs> …\n' +
           '  prepare [PR url | owner/repo#n | n] [--base ref] [--lang l] [--comment-lang l] [--only a,b] [--skip a,b] [--min-severity s] [--force]\n' +
           '  candidates <runDir>   < findings JSON\n' +
           '  finalize <runDir>     < verdicts JSON\n' +
+          '  map <runDir>          < cartographer JSON\n' +
           '  serve <runDir> [--port n] [--no-open]\n' +
           '  runs\n',
       );
