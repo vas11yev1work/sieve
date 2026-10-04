@@ -137,7 +137,6 @@ export function showFinding(id: string) {
   const f = store.run?.findings.find((x) => x.id === id);
   if (!f) return;
   store.view = 'review';
-  store.kind = 'all';
   store.tab = f.filtered ? 'filtered' : store.run!.state.findings[id]?.status || 'open';
   store.selected = id;
 }

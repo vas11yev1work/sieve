@@ -1,18 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
-import {
-  store,
-  load,
-  counts,
-  kindCounts,
-  current,
-  move,
-  setLanguages,
-  findingState,
-  visible,
-  type Tab,
-  type Kind,
-} from './store';
+import { store, load, counts, current, move, setLanguages, findingState, visible, type Tab } from './store';
 import { t } from './i18n';
 import FindingList from './components/FindingList.vue';
 import FindingDetail from './components/FindingDetail.vue';
@@ -34,6 +22,7 @@ import {
   Power,
   ListChecks,
   Network,
+  ListFilter,
 } from 'lucide-vue-next';
 import { api } from './api';
 
@@ -42,6 +31,7 @@ const MapView = defineAsyncComponent(() => import('./components/MapView.vue'));
 
 const publishing = ref(false);
 const langOpen = ref(false);
+const filterOpen = ref(false);
 const reportLang = ref('');
 const commentLang = ref('');
 const persist = ref(false);
@@ -56,12 +46,12 @@ const tabs = computed<{ id: Tab; label: string }[]>(() => [
   { id: 'filtered', label: t.value.filtered },
 ]);
 
-const kinds = computed<{ id: Kind; label: string }[]>(() => [
-  { id: 'all', label: t.value.all },
-  { id: 'issues', label: t.value.issues },
-  { id: 'quality', label: t.value.quality },
-]);
-const hasQuality = computed(() => store.run?.findings.some((f) => f.category === 'quality'));
+const reviewerNames = computed(() => [...new Set(store.run?.findings.flatMap((f) => f.reviewers))].sort());
+
+function toggleReviewer(name: string) {
+  const h = store.hiddenReviewers;
+  store.hiddenReviewers = h.includes(name) ? h.filter((r) => r !== name) : [...h, name];
+}
 
 const ready = computed(
   () =>
@@ -71,12 +61,9 @@ const ready = computed(
     }).length,
 );
 
-watch(
-  () => [store.tab, store.kind],
-  () => {
-    if (!visible.value.some((f) => f.id === store.selected)) store.selected = visible.value[0]?.id || '';
-  },
-);
+watch(visible, () => {
+  if (!visible.value.some((f) => f.id === store.selected)) store.selected = visible.value[0]?.id || '';
+});
 
 function openLang() {
   reportLang.value = store.run?.settings.reportLanguage || 'en';
@@ -268,17 +255,20 @@ onBeforeUnmount(() => {
       >
         {{ tb.label }} <span class="n">{{ counts[tb.id] }}</span>
       </button>
-      <span v-if="hasQuality" class="kinds">
-        <button
-          v-for="k in kinds"
-          :key="k.id"
-          class="tab"
-          :class="{ active: store.kind === k.id }"
-          @click="store.kind = k.id"
-        >
-          {{ k.label }} <span class="n">{{ kindCounts[k.id] }}</span>
+      <div v-if="reviewerNames.length > 1" class="filter-wrap">
+        <button class="tab" :class="{ active: store.hiddenReviewers.length }" @click="filterOpen = !filterOpen">
+          <ListFilter :size="14" /> {{ t.reviewerFilter }}
+          <span v-if="store.hiddenReviewers.length" class="n">
+            {{ reviewerNames.length - store.hiddenReviewers.length }}/{{ reviewerNames.length }}
+          </span>
         </button>
-      </span>
+        <div v-if="filterOpen" class="popover filter-pop">
+          <label v-for="r in reviewerNames" :key="r" class="check">
+            <input type="checkbox" :checked="!store.hiddenReviewers.includes(r)" @change="toggleReviewer(r)" />
+            <span class="mono">{{ r }}</span>
+          </label>
+        </div>
+      </div>
       <span class="grow" />
       <span class="muted shortcuts"><Keyboard :size="13" /> {{ t.shortcuts }}</span>
     </nav>
@@ -419,8 +409,36 @@ onBeforeUnmount(() => {
   padding: 0 7px;
   font-size: 12px;
 }
-.lang-wrap {
+.lang-wrap,
+.filter-wrap {
   position: relative;
+}
+.filter-wrap {
+  margin-left: 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+.filter-wrap .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-pop {
+  left: 12px;
+  right: auto;
+  width: 200px;
+  gap: 2px;
+  padding: 6px;
+}
+.filter-pop .check {
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 12.5px;
+}
+.filter-pop .check:hover {
+  background: var(--panel-2);
 }
 .popover {
   position: absolute;
@@ -464,13 +482,6 @@ onBeforeUnmount(() => {
   padding: 6px 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
-}
-.kinds {
-  display: flex;
-  gap: 4px;
-  margin-left: 8px;
-  padding-left: 12px;
-  border-left: 1px solid var(--border);
 }
 .tab {
   border: none;

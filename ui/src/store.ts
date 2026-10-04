@@ -4,8 +4,6 @@ import { api, stream, type RunData } from './api';
 import { uiLang } from './i18n';
 
 export type Tab = FindingStatus | 'filtered' | 'all';
-/** Category filter on top of the status tabs: quality findings vs everything else. */
-export type Kind = 'all' | 'issues' | 'quality';
 /** Top-level tab. */
 export type View = 'review' | 'map';
 
@@ -22,8 +20,9 @@ export const store = reactive({
   run: null as RunData | null,
   view: 'review' as View,
   tab: 'open' as Tab,
-  kind: 'all' as Kind,
   selected: '' as string,
+  /** Reviewers whose findings are hidden from the list (filter in the tabs bar). */
+  hiddenReviewers: [] as string[],
   /** Keyed by thread: a finding id or `map:<flowId>:<nodeId>`. */
   pending: {} as Record<string, Pending>,
   errors: {} as Record<string, string>,
@@ -57,37 +56,24 @@ function setThread(key: string, s: ChatThread) {
   if (store.run) (store.run.state.threads ??= {})[key] = s;
 }
 
-function matchesKind(f: Finding, kind: Kind) {
-  return kind === 'all' || (kind === 'quality') === (f.category === 'quality');
-}
+const hidden = (f: Finding) => f.reviewers.length > 0 && f.reviewers.every((r) => store.hiddenReviewers.includes(r));
 
-function matchesStatus(f: Finding, tab: Tab) {
+export function matchesTab(f: Finding, tab: Tab) {
+  if (hidden(f)) return false;
   if (tab === 'all') return true;
   if (tab === 'filtered') return f.filtered;
   return !f.filtered && findingState(f.id).status === tab;
 }
-
-export const matchesTab = (f: Finding, tab: Tab) => matchesKind(f, store.kind) && matchesStatus(f, tab);
 
 export const visible = computed(() => (store.run?.findings || []).filter((f) => matchesTab(f, store.tab)));
 
 export const counts = computed(() => {
   const c: Record<Tab, number> = { open: 0, accepted: 0, rejected: 0, filtered: 0, all: 0 };
   for (const f of store.run?.findings || []) {
-    if (!matchesKind(f, store.kind)) continue;
+    if (hidden(f)) continue;
     c.all++;
     if (f.filtered) c.filtered++;
     else c[findingState(f.id).status]++;
-  }
-  return c;
-});
-
-export const kindCounts = computed(() => {
-  const c: Record<Kind, number> = { all: 0, issues: 0, quality: 0 };
-  for (const f of store.run?.findings || []) {
-    if (!matchesStatus(f, store.tab)) continue;
-    c.all++;
-    c[f.category === 'quality' ? 'quality' : 'issues']++;
   }
   return c;
 });
