@@ -71,7 +71,7 @@ export function reviewerPrompt(
   const rulesSection = rules.length
     ? '- Project rules that apply to this change (read the ones relevant to your focus):\n' +
       rules
-        .map((r) => `  - \`${join(meta.worktree, r.path)}\`${r.scope ? ` — scope: \`${r.scope}/\`` : ' — whole repo'}`)
+        .map((r) => `  - \`${join(meta.repoRoot, r.path)}\`${r.scope ? ` — scope: \`${r.scope}/\`` : ' — whole repo'}`)
         .join('\n')
     : '- No project rule files were found.';
 

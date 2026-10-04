@@ -215,7 +215,7 @@ async function prepare(argv: string[]) {
   writeJson(p.diff, files);
   writeJson(p.meta, meta);
 
-  const rules = discoverRules(meta.worktree, settings.rules, meta.changedFiles);
+  const rules = discoverRules(meta.repoRoot, settings.rules, meta.changedFiles);
   writeJson(p.rules, rules);
 
   const reviewers = loadReviewers(SIEVE_ROOT, meta.repoRoot, settings, only, skip);

@@ -192,8 +192,9 @@ export function localDiff(
   return { patch: patch.endsWith('\n') || !patch ? patch : patch + '\n', baseSha, headSha, branch };
 }
 
-/** All files known to git in `dir` (tracked + untracked-not-ignored). */
+/** All files in `dir`: tracked + untracked, gitignored included (personal rules are often ignored). */
 export function listFiles(dir: string): string[] {
-  const r = sh(['git', 'ls-files', '-co', '--exclude-standard'], { cwd: dir });
+  // ponytail: walks ignored dirs too (node_modules…); pass pathspecs if this gets slow on huge repos
+  const r = sh(['git', 'ls-files', '-co'], { cwd: dir });
   return r.ok ? r.stdout.split('\n').filter(Boolean) : [];
 }
