@@ -47,15 +47,18 @@ const ci = computed(() => {
   return { cls: 'warn', icon: ShieldEllipsis, text: i.value.ci[s] };
 });
 
+/** Findings of the run on the current head still wait for you (to triage or to publish). */
+const pending = computed(
+  () => !!cur.value && !cur.value.reviews.length && (cur.value.status.open > 0 || cur.value.unpublished > 0),
+);
+
 /** One primary action per row; `secondary` opens an older run or re-runs a reviewed one. */
 const action = computed(() => {
-  const b = props.pr.bucket;
   if (active.value) return { kind: 'cancel', label: t.value.cancel, cls: '' };
   if (failed.value) return { kind: 'review', label: i.value.retry, cls: 'primary' };
-  if (b === 'new') return { kind: 'review', label: i.value.review, cls: 'go' };
-  if (b === 'triage') return { kind: 'open', label: i.value.open, cls: 'primary' };
+  if (pending.value) return { kind: 'open', label: i.value.open, cls: 'primary' };
   if (cur.value) return { kind: 'open', label: i.value.open, cls: '' };
-  return { kind: 'review', label: i.value.review, cls: '' };
+  return { kind: 'review', label: i.value.review, cls: 'go' };
 });
 const secondary = computed(() => {
   if (active.value || failed.value) return null;

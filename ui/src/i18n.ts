@@ -116,10 +116,7 @@ const en = {
     colSieve: 'In Sieve',
     groups: {
       reviewing: ['In progress', 'Sieve agents are working on these'],
-      new: ['To review', 'Requested from you, no Sieve run on the latest commit'],
-      triage: ['To triage', 'Accept or reject the findings, then publish'],
-      done: ['Done', 'Published, or nothing left to go through, until new commits come'],
-      reviewed: ['Earlier', 'Open PRs you reviewed that no longer request you'],
+      review: ['To review', 'Not reviewed by you yet, or new commits since your review; not approved by anyone on top'],
     } as Record<string, [string, string]>,
     empty: 'Nothing is waiting for your review.',
     emptyFiltered: 'No pull requests match the filter.',
@@ -295,10 +292,7 @@ const ru: typeof en = {
     colSieve: 'В Sieve',
     groups: {
       reviewing: ['В работе', 'Над ними сейчас работают агенты Sieve'],
-      new: ['К ревью', 'Тебя запросили, а прогона Sieve на последнем коммите нет'],
-      triage: ['Разобрать', 'Прими или отклони находки, потом опубликуй'],
-      done: ['Готово', 'Опубликовано или разбирать нечего, до новых коммитов'],
-      reviewed: ['Ранее', 'Открытые PR, где ты оставлял ревью, но тебя больше не запрашивают'],
+      review: ['Нужно ревью', 'Ты ещё не ревьюил или после твоего ревью пришли коммиты; сверху без одобрений'],
     } as Record<string, [string, string]>,
     empty: 'Ничего не ждёт твоего ревью.',
     emptyFiltered: 'Под фильтр ничего не подходит.',

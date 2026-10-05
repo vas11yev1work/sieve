@@ -146,7 +146,7 @@ export interface InboxSettings {
   owners: string[];
   excludeRepos: string[];
   includeDrafts: boolean;
-  /** Also list open PRs you reviewed before that no longer request you. */
+  /** Also list PRs you reviewed (or approved) that got new commits since, even if you are not requested again. */
   showReviewed: boolean;
   /** "owner/repo" → local checkout to run reviews from (its rules, gitignored ones included). */
   checkouts: Record<string, string>;
@@ -154,7 +154,8 @@ export interface InboxSettings {
 
 // ───────────── Inbox ─────────────
 
-export type InboxBucket = 'reviewing' | 'new' | 'triage' | 'done' | 'reviewed';
+/** reviewing = a Sieve review is running or queued; review = something is needed from you. */
+export type InboxBucket = 'reviewing' | 'review';
 
 /** A Sieve run of one PR found on disk. */
 export interface InboxRun {

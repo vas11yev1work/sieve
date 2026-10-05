@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { RefreshCw, LoaderCircle, CircleAlert, Search, ChevronRight, Inbox, Power } from 'lucide-vue-next';
+import { RefreshCw, LoaderCircle, CircleAlert, Search, Inbox, Power, Info } from 'lucide-vue-next';
 import type { InboxBucket, InboxData, InboxPr } from '../../../shared/types';
 import { inboxApi } from '../api';
 import { t, uiLang } from '../i18n';
@@ -15,11 +15,10 @@ const refreshing = ref(false);
 const error = ref('');
 const filter = ref('');
 const opening = ref('');
-const showReviewed = ref(false);
 const tick = ref(Date.now());
 const stopped = ref(false);
 
-const ORDER: InboxBucket[] = ['reviewing', 'triage', 'new', 'done', 'reviewed'];
+const ORDER: InboxBucket[] = ['reviewing', 'review'];
 
 async function load(refresh = false) {
   refreshing.value = refresh;
@@ -41,12 +40,25 @@ const matches = (p: InboxPr, q: string) =>
     s.toLowerCase().includes(q),
   );
 
+/** Findings of the run on the current head still wait for you. */
+const pending = (p: InboxPr) =>
+  p.runs.some((r) => r.onHead && !r.reviews.length && (r.status.open > 0 || r.unpublished > 0));
+
+/**
+ * Not approved by anyone first, approved by others below; within each, PRs whose Sieve findings
+ * wait for you go first (a just-finished review stays in view), then the most recently updated.
+ */
+const byNeed = (a: InboxPr, b: InboxPr) =>
+  Number(a.approvals > 0) - Number(b.approvals > 0) ||
+  Number(pending(b)) - Number(pending(a)) ||
+  b.updatedAt.localeCompare(a.updatedAt);
+
 const groups = computed(() => {
   const q = filter.value.trim().toLowerCase();
   const prs = (data.value?.prs || []).filter((p) => matches(p, q));
   return ORDER.map((id) => ({
     id,
-    prs: prs.filter((p) => p.bucket === id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    prs: prs.filter((p) => p.bucket === id).sort(byNeed),
   })).filter((g) => g.prs.length);
 });
 
@@ -195,9 +207,14 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
             <Search :size="15" class="muted" />
             <input v-model="filter" type="text" :placeholder="t.inbox.filter" :aria-label="t.inbox.filter" />
           </label>
-          <span v-if="data?.query" class="muted query" :title="data.query">
-            {{ t.inbox.search }}: <span class="mono">{{ data.query }}</span>
-          </span>
+          <span
+            v-if="data?.query"
+            class="query"
+            tabindex="0"
+            :title="`${t.inbox.search}: ${data.query}`"
+            :aria-label="`${t.inbox.search}: ${data.query}`"
+            ><Info :size="16"
+          /></span>
         </div>
 
         <div v-if="!total" class="state">
@@ -207,18 +224,12 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
         <div v-else-if="!groups.length" class="state muted">{{ t.inbox.emptyFiltered }}</div>
 
         <section v-for="g in groups" :id="g.id" :key="g.id" class="group" :class="`b-${g.id}`">
-          <component
-            :is="g.id === 'reviewed' ? 'button' : 'div'"
-            class="ghead"
-            :aria-expanded="g.id === 'reviewed' ? showReviewed : undefined"
-            @click="g.id === 'reviewed' && (showReviewed = !showReviewed)"
-          >
-            <ChevronRight v-if="g.id === 'reviewed'" :size="16" class="chev" :class="{ open: showReviewed }" />
+          <div class="ghead">
             <h2>{{ t.inbox.groups[g.id]![0] }}</h2>
             <span class="n">{{ g.prs.length }}</span>
             <span class="hint muted">{{ t.inbox.groups[g.id]![1] }}</span>
-          </component>
-          <div v-if="g.id !== 'reviewed' || showReviewed" class="list">
+          </div>
+          <div class="list">
             <div class="cols muted" aria-hidden="true">
               <span>{{ t.inbox.colPr }}</span>
               <span>{{ t.inbox.colGithub }}</span>
@@ -314,8 +325,7 @@ h1 {
 .jump .n {
   background: var(--panel);
 }
-.jump a.b-reviewing .n,
-.jump a.b-new .n {
+.jump a .n {
   background: var(--accent);
   color: var(--accent-text);
 }
@@ -379,14 +389,18 @@ h1 {
   box-shadow: none !important;
 }
 .query {
-  font-size: 12px;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  display: inline-flex;
+  color: var(--muted);
+  cursor: help;
+  border-radius: 50%;
 }
-.query .mono {
-  font-size: 11.5px;
+.query:hover,
+.query:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+.query:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-weak);
 }
 .cols {
   display: grid;
@@ -405,26 +419,6 @@ h1 {
   align-items: baseline;
   gap: 10px;
   padding: 0 4px 8px;
-  width: 100%;
-  border: none;
-  background: none;
-  border-radius: 0;
-  color: inherit;
-  text-align: left;
-}
-button.ghead:hover:not(:disabled) {
-  background: none;
-}
-button.ghead:hover h2 {
-  color: var(--accent);
-}
-.chev {
-  align-self: center;
-  color: var(--muted);
-  transition: transform 0.15s;
-}
-.chev.open {
-  transform: rotate(90deg);
 }
 .ghead h2 {
   margin: 0;
@@ -432,8 +426,7 @@ button.ghead:hover h2 {
   font-weight: 650;
   letter-spacing: -0.01em;
 }
-.group.b-new .ghead .n,
-.group.b-reviewing .ghead .n {
+.ghead .n {
   background: var(--accent);
   color: var(--accent-text);
 }
@@ -449,10 +442,6 @@ button.ghead:hover h2 {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-}
-.group.b-done .list,
-.group.b-reviewed .list {
-  background: color-mix(in srgb, var(--panel) 60%, var(--bg));
 }
 .state {
   display: flex;
@@ -491,17 +480,11 @@ button.ghead:hover h2 {
     padding: 16px 12px 48px;
   }
   .updated,
-  .query,
   .hint {
     display: none;
   }
   .bar {
     gap: 10px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .chev {
-    transition: none;
   }
 }
 </style>

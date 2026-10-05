@@ -28,11 +28,14 @@ export async function inboxData(
       error = (e as Error).message;
     }
   }
-  const prs: InboxPr[] = (gh?.prs || []).map((p) => {
+  const prs: InboxPr[] = [];
+  for (const p of gh?.prs || []) {
+    const job = jobs.get(p.url);
+    const bucket = bucketOf({ ...p, job });
+    if (!bucket) continue; // nothing needed from you
     const checkout = checkoutOf(s.inbox, p.owner, p.repo);
-    const row = { ...p, checkout, runs: localRuns(p, checkout), job: jobs.get(p.url) };
-    return { ...row, bucket: bucketOf(row) };
-  });
+    prs.push({ ...p, checkout, runs: localRuns(p, checkout), job, bucket });
+  }
   return {
     enabled: s.inbox.enabled,
     viewer: gh?.viewer,

@@ -133,7 +133,7 @@
         "includeDrafts": { "type": "boolean", "default": false },
         "showReviewed": {
           "type": "boolean",
-          "description": "Also list open PRs you reviewed before that no longer request you.",
+          "description": "Also list PRs you reviewed or approved that got new commits since, even when you are not requested again.",
           "default": true
         },
         "checkouts": {

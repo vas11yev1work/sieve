@@ -119,7 +119,12 @@ When the map is built is set by `map.mode`:
 
 A page at `http://127.0.0.1:7438/inbox` (always the same port, `inbox.port`) with every open PR that requests your review, across all repos your `gh` token can see — with what GitHub says about it and what Sieve has done with it. Start a review with one click; it runs in the background and the page shows how far it got.
 
-PRs are grouped by what you need to do: **In progress** (Sieve agents are on it), **To triage** (findings to accept or reject — right under, so a finished review stays in view), **To review** (no Sieve run on the latest commit), **Done** (published, or nothing left to triage, until new commits come) and **Earlier** (open PRs you reviewed that no longer request you).
+Only PRs that need something from you are listed, in two groups:
+
+- **In progress** — a Sieve review is running or queued.
+- **To review** — you are requested and have not reviewed the current commit, or new commits came after your review or approval. PRs nobody has approved on their current commit come first (an approval given before newer commits does not count), then those approved by others; within each, PRs whose Sieve findings wait for you go first.
+
+PRs you already reviewed or approved on their current commit (comments published from Sieve included) are hidden until new commits come, as are merged and closed ones. Being personally requested again, or your review being dismissed, brings a PR back.
 
 Each row shows:
 
@@ -141,7 +146,7 @@ The inbox is off by default and reads **only** `~/.sieve/settings.json` (it span
     "owners": [], // ["acme"] — only these users / orgs
     "excludeRepos": [], // ["acme/legacy"]
     "includeDrafts": false,
-    "showReviewed": true, // the "Earlier" group
+    "showReviewed": true, // also PRs you reviewed that got new commits, when not requested again
     "checkouts": { "acme/web": "~/code/web" }, // where to run reviews from
   },
 }

@@ -2,36 +2,33 @@ import { describe, expect, test } from 'bun:test';
 import { bucketOf, parsePrs, scopeQuery } from '../cli/lib/inbox.ts';
 import { DEFAULT_SETTINGS } from '../cli/lib/settings.ts';
 import { trackJob } from '../server/inbox.ts';
-import type { InboxJob, InboxRun } from '../shared/types.ts';
+import type { InboxJob } from '../shared/types.ts';
 import { progress } from '../ui/src/inbox/track.ts';
 
-const run = (o: Partial<InboxRun> = {}): InboxRun => ({
-  runDir: '/r',
-  headSha: 'h',
-  createdAt: '2026-01-01',
-  onHead: true,
-  findings: { critical: 0, major: 1, minor: 0, nit: 0 },
-  filtered: 0,
-  status: { open: 1, accepted: 0, rejected: 0 },
-  unpublished: 0,
-  reviews: [],
-  map: false,
-  ...o,
-});
-
 describe('bucketOf', () => {
-  test('groups', () => {
-    expect(bucketOf({ requested: 'me', runs: [] })).toBe('new');
-    expect(bucketOf({ requested: 'me', runs: [run({ onHead: false })] })).toBe('new');
-    expect(bucketOf({ requested: 'team', runs: [run()] })).toBe('triage');
-    expect(bucketOf({ requested: 'me', runs: [run({ reviews: [{ at: 'x', count: 1 }] })] })).toBe('done');
-    expect(bucketOf({ requested: 'me', runs: [run({ status: { open: 0, accepted: 0, rejected: 1 } })] })).toBe('done');
-    expect(
-      bucketOf({ requested: 'me', runs: [run({ status: { open: 0, accepted: 1, rejected: 0 }, unpublished: 1 })] }),
-    ).toBe('triage');
-    expect(bucketOf({ requested: null, runs: [] })).toBe('reviewed');
+  const mine = (state: string, onHead: boolean) => ({ state, at: '', onHead });
+
+  test('needs you: requested, or new commits after your review', () => {
+    expect(bucketOf({ requested: 'me' })).toBe('review');
+    expect(bucketOf({ requested: 'team' })).toBe('review');
+    expect(bucketOf({ requested: null, myReview: mine('APPROVED', false) })).toBe('review');
+    expect(bucketOf({ requested: null, myReview: mine('COMMENTED', false) })).toBe('review');
+    // personally requested again on the same head
+    expect(bucketOf({ requested: 'me', myReview: mine('COMMENTED', true) })).toBe('review');
+    // your review on the current head was dismissed
+    expect(bucketOf({ requested: null, myReview: mine('DISMISSED', true) })).toBe('review');
+  });
+
+  test('hidden: you already reviewed the current head', () => {
+    expect(bucketOf({ requested: null, myReview: mine('APPROVED', true) })).toBeNull();
+    expect(bucketOf({ requested: null, myReview: mine('CHANGES_REQUESTED', true) })).toBeNull();
+    expect(bucketOf({ requested: 'team', myReview: mine('APPROVED', true) })).toBeNull();
+    expect(bucketOf({ requested: null })).toBeNull();
+  });
+
+  test('a running review wins', () => {
     const job = { state: 'running' } as InboxJob;
-    expect(bucketOf({ requested: null, runs: [], job })).toBe('reviewing');
+    expect(bucketOf({ requested: null, myReview: mine('APPROVED', true), job })).toBe('reviewing');
   });
 });
 
@@ -65,8 +62,9 @@ describe('parsePrs', () => {
               reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'User', login: 'Me' } }] },
               reviews: {
                 nodes: [
-                  { author: { login: 'bob' }, state: 'APPROVED', commit: { oid: 'old' } },
+                  { author: { login: 'bob' }, state: 'APPROVED', commit: { oid: 'head' } },
                   { author: { login: 'bob' }, state: 'COMMENTED', commit: { oid: 'head' } },
+                  { author: { login: 'ann' }, state: 'APPROVED', commit: { oid: 'old' } },
                   { author: { login: 'me' }, state: 'CHANGES_REQUESTED', commit: { oid: 'old' } },
                 ],
               },
@@ -88,7 +86,8 @@ describe('parsePrs', () => {
       ['u2', 'team'],
       ['u3', null],
     ]);
-    expect(rows[0]!.approvals).toBe(1); // a later COMMENTED keeps bob's approval
+    // bob: a later COMMENTED keeps the approval; ann approved before newer commits → not counted
+    expect(rows[0]!.approvals).toBe(1);
     expect(rows[0]!.myReview).toMatchObject({ state: 'CHANGES_REQUESTED', onHead: false });
     expect(rows[1]!.teams).toEqual(['acme/fe']);
     expect(rows[0]!.threads).toEqual({ total: 2, unresolved: 1 });

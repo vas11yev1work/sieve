@@ -136,7 +136,8 @@ export function parsePrs(data: any, viewer: string): Omit<InboxPr, 'runs' | 'buc
       requested: !requested ? null : direct ? 'me' : 'team',
       teams,
       decision: n.reviewDecision || null,
-      approvals: states.filter((s) => s === 'APPROVED').length,
+      // An approval given before newer commits does not count: those commits were not approved.
+      approvals: [...latest.values()].filter((r) => r.state === 'APPROVED' && r.sha === n.headRefOid).length,
       changesRequested: states.filter((s) => s === 'CHANGES_REQUESTED').length,
       myReview: mine && { ...mine, onHead: mine.sha === n.headRefOid },
       ci: n.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state || null,
@@ -224,12 +225,18 @@ export function localRuns(pr: Pick<InboxPr, 'owner' | 'repo' | 'number' | 'headS
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/** Which group of the inbox a PR belongs to. */
-export function bucketOf(pr: Pick<InboxPr, 'requested' | 'runs' | 'job'>): InboxBucket {
+/**
+ * Which group of the inbox a PR belongs to; null = nothing is needed from you, so it is not shown.
+ * Needed: you are requested and have not reviewed the current head, or new commits came after your
+ * review / approval, or your review was dismissed. Reviewed (approved, commented, published from Sieve)
+ * on the current head = hidden,
+ * unless you were personally requested again (GitHub drops your request when you review).
+ */
+export function bucketOf(pr: Pick<InboxPr, 'requested' | 'myReview' | 'job'>): InboxBucket | null {
   if (pr.job && (pr.job.state === 'queued' || pr.job.state === 'running')) return 'reviewing';
-  if (!pr.requested) return 'reviewed';
-  const cur = pr.runs.find((r) => r.onHead);
-  if (!cur) return 'new';
-  if (cur.reviews.length || (cur.status.open === 0 && cur.unpublished === 0)) return 'done';
-  return 'triage';
+  // A dismissed review no longer counts.
+  const done = !!pr.myReview?.onHead && pr.myReview.state !== 'DISMISSED';
+  if (done && pr.requested !== 'me') return null;
+  if (pr.requested) return 'review';
+  return pr.myReview && !done ? 'review' : null;
 }
