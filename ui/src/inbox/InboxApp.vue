@@ -19,7 +19,7 @@ const showReviewed = ref(false);
 const tick = ref(Date.now());
 const stopped = ref(false);
 
-const ORDER: InboxBucket[] = ['reviewing', 'new', 'triage', 'done', 'reviewed'];
+const ORDER: InboxBucket[] = ['reviewing', 'triage', 'new', 'done', 'reviewed'];
 
 async function load(refresh = false) {
   refreshing.value = refresh;

@@ -119,7 +119,7 @@ When the map is built is set by `map.mode`:
 
 A page at `http://127.0.0.1:7438/inbox` (always the same port, `inbox.port`) with every open PR that requests your review, across all repos your `gh` token can see — with what GitHub says about it and what Sieve has done with it. Start a review with one click; it runs in the background and the page shows how far it got.
 
-PRs are grouped by what you need to do: **Reviewing** (Sieve agents are on it), **Needs review** (no Sieve run on the latest commit), **Findings to go through**, **Done for this commit** (published, or nothing left to triage) and **You reviewed before** (open PRs you reviewed that no longer request you).
+PRs are grouped by what you need to do: **In progress** (Sieve agents are on it), **To triage** (findings to accept or reject — right under, so a finished review stays in view), **To review** (no Sieve run on the latest commit), **Done** (published, or nothing left to triage, until new commits come) and **Earlier** (open PRs you reviewed that no longer request you).
 
 Each row shows:
 
