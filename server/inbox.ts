@@ -3,7 +3,7 @@
  * (`claude -p "/sieve:review <url>"`) started from the page.
  */
 import { Hono } from 'hono';
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { InboxData, InboxJob, InboxPr, Settings } from '../shared/types.ts';
 import { SIEVE_HOME } from '../cli/lib/settings.ts';
@@ -40,6 +40,7 @@ export async function inboxData(
     fetchedAt: new Date().toISOString(),
     error: error || gh?.warning,
     reportLanguage: s.reportLanguage,
+    commentLanguage: s.commentLanguage,
     prs,
   };
 }
@@ -91,11 +92,19 @@ export function createInboxApp(o: InboxServerOptions) {
   const aborts = new Map<string, AbortController>();
   const force = new Set<string>();
   let gh: { at: number; rows?: GitHubRows; error?: string } | null = null;
-  const settings = inboxSettings;
+  /** Languages picked on the page without "save as default": this page only. */
+  let lang: { reportLanguage?: string; commentLanguage?: string } = {};
+  const settings = () => ({ ...inboxSettings(), ...lang });
 
   async function data(refresh: boolean) {
     const s = settings();
-    if (!s.inbox.enabled) return { enabled: false, reportLanguage: s.reportLanguage, prs: [] } as InboxData;
+    if (!s.inbox.enabled)
+      return {
+        enabled: false,
+        reportLanguage: s.reportLanguage,
+        commentLanguage: s.commentLanguage,
+        prs: [],
+      } as InboxData;
     // ponytail: GitHub is asked at most once a minute unless the user refreshes; polling reads the cache
     if (refresh || !gh || Date.now() - gh.at > 60_000) {
       try {
@@ -217,6 +226,31 @@ export function createInboxApp(o: InboxServerOptions) {
     const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
     if ((await proc.exited) !== 0) return c.json({ error: err.trim() || 'Could not start the run UI.' }, 500);
     return c.json({ url: JSON.parse(out).url as string });
+  });
+
+  app.put('/api/inbox/settings', async (c) => {
+    const body = await c.req.json<{ reportLanguage?: string; commentLanguage?: string; persist?: boolean }>();
+    const pick: Record<string, string> = {};
+    if (body.reportLanguage?.trim()) pick.reportLanguage = body.reportLanguage.trim();
+    if (body.commentLanguage?.trim()) pick.commentLanguage = body.commentLanguage.trim();
+    lang = { ...lang, ...pick };
+    if (body.persist) {
+      // The inbox spans repos, so its default is the global one.
+      const file = join(SIEVE_HOME, 'settings.json');
+      const cur = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+      writeJson(file, { ...cur, ...pick });
+    }
+    const s = settings();
+    return c.json({ reportLanguage: s.reportLanguage, commentLanguage: s.commentLanguage });
+  });
+
+  /** Stop the inbox: cancel running reviews, then exit. */
+  app.post('/api/inbox/shutdown', (c) => {
+    for (const j of jobs.values()) if (j.state === 'queued') j.state = 'cancelled';
+    for (const ac of aborts.values()) ac.abort();
+    rmSync(join(SIEVE_HOME, 'inbox.json'), { force: true });
+    setTimeout(() => process.exit(0), 300); // let the response flush and claude get its signal
+    return c.json({ ok: true });
   });
 
   app.get('/', (c) => c.redirect('/inbox'));

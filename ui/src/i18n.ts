@@ -172,6 +172,11 @@ const en = {
     runsFrom: (dir: string) => `Reviews run from ${dir}`,
     runsFromClone: 'Reviews run from a clone in ~/.sieve/repos',
     search: 'Search',
+    stop: 'Stop',
+    stopConfirm: 'Stop the inbox server?',
+    stopConfirmBusy: 'Stop the inbox server? Running and queued reviews will be cancelled.',
+    stopped: 'Inbox stopped. Run /sieve:inbox to start it again. You can close this tab.',
+    saveDefault: 'Save as my default for all projects',
   },
 };
 
@@ -346,6 +351,11 @@ const ru: typeof en = {
     runsFrom: (dir: string) => `Ревью запускается из ${dir}`,
     runsFromClone: 'Ревью запускается из клона в ~/.sieve/repos',
     search: 'Поиск',
+    stop: 'Остановить',
+    stopConfirm: 'Остановить сервер Inbox?',
+    stopConfirmBusy: 'Остановить сервер Inbox? Идущие и ожидающие ревью будут отменены.',
+    stopped: 'Inbox остановлен. Запустить снова — /sieve:inbox. Вкладку можно закрыть.',
+    saveDefault: 'Сохранить как мой дефолт для всех проектов',
   },
 };
 

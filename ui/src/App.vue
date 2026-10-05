@@ -7,11 +7,11 @@ import FindingDetail from './components/FindingDetail.vue';
 import ChatPanel from './components/ChatPanel.vue';
 import PublishDialog from './components/PublishDialog.vue';
 import Markdown from './components/Markdown.vue';
+import LanguagePicker from './components/LanguagePicker.vue';
 import { mapStore, mapEnabled, prMap, loadMap, moveFlow, selectFlow, showNode } from './map';
 import {
   GitBranch,
   ArrowRight,
-  Languages,
   Send,
   Copy,
   Keyboard,
@@ -30,14 +30,8 @@ import { api } from './api';
 const MapView = defineAsyncComponent(() => import('./components/MapView.vue'));
 
 const publishing = ref(false);
-const langOpen = ref(false);
 const filterOpen = ref(false);
-const reportLang = ref('');
-const commentLang = ref('');
-const persist = ref(false);
 const chat = ref<InstanceType<typeof ChatPanel> | null>(null);
-
-const LANGS = ['en', 'ru', 'sr', 'uk', 'de', 'fr', 'es', 'it', 'pl', 'pt', 'nl', 'tr', 'zh', 'ja'];
 
 const tabs = computed<{ id: Tab; label: string }[]>(() => [
   { id: 'open', label: t.value.open },
@@ -64,22 +58,6 @@ const ready = computed(
 watch(visible, () => {
   if (!visible.value.some((f) => f.id === store.selected)) store.selected = visible.value[0]?.id || '';
 });
-
-function openLang() {
-  reportLang.value = store.run?.settings.reportLanguage || 'en';
-  commentLang.value = store.run?.settings.commentLanguage || 'en';
-  persist.value = false;
-  langOpen.value = !langOpen.value;
-}
-
-async function applyLang() {
-  await setLanguages({
-    reportLanguage: reportLang.value.trim(),
-    commentLanguage: commentLang.value.trim(),
-    persist: persist.value,
-  });
-  langOpen.value = false;
-}
 
 async function finish() {
   if (!confirm(t.value.finishConfirm)) return;
@@ -211,31 +189,12 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="actions">
-        <div class="lang-wrap">
-          <button class="ghost" :title="t.languageHint" @click="openLang">
-            <Languages :size="15" /> <span class="mono">{{ store.run.settings.reportLanguage }}</span> /
-            <span class="mono">{{ store.run.settings.commentLanguage }}</span>
-          </button>
-          <div v-if="langOpen" class="popover">
-            <div class="muted hint">{{ t.languageHint }}</div>
-            <label>
-              <span>{{ t.report }}</span>
-              <input v-model="reportLang" type="text" list="langs" />
-            </label>
-            <label>
-              <span>{{ t.comments }}</span>
-              <input v-model="commentLang" type="text" list="langs" />
-            </label>
-            <label class="check"><input v-model="persist" type="checkbox" /> {{ t.saveDefault }}</label>
-            <div class="row">
-              <button class="ghost" @click="langOpen = false">{{ t.cancel }}</button>
-              <button class="primary" @click="applyLang">OK</button>
-            </div>
-          </div>
-          <datalist id="langs">
-            <option v-for="l in LANGS" :key="l" :value="l" />
-          </datalist>
-        </div>
+        <LanguagePicker
+          :report="store.run.settings.reportLanguage"
+          :comment="store.run.settings.commentLanguage"
+          :save-label="t.saveDefault"
+          @apply="setLanguages"
+        />
         <button class="primary" @click="publishing = true">
           <Send v-if="store.run.meta.mode === 'pr'" :size="14" /><Copy v-else :size="14" />
           {{ store.run.meta.mode === 'pr' ? t.publish : t.export }}
@@ -409,7 +368,6 @@ onBeforeUnmount(() => {
   padding: 0 7px;
   font-size: 12px;
 }
-.lang-wrap,
 .filter-wrap {
   position: relative;
 }
@@ -465,14 +423,6 @@ onBeforeUnmount(() => {
 .popover .check {
   flex-direction: row;
   align-items: center;
-  gap: 6px;
-}
-.popover .hint {
-  font-size: 12px;
-}
-.popover .row {
-  display: flex;
-  justify-content: flex-end;
   gap: 6px;
 }
 .tabs {

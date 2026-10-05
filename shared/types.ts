@@ -238,6 +238,7 @@ export interface InboxData {
   fetchedAt?: string;
   error?: string;
   reportLanguage: string;
+  commentLanguage: string;
   prs: InboxPr[];
 }
 

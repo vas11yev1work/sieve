@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { RefreshCw, LoaderCircle, CircleAlert, Search, ChevronRight, Inbox } from 'lucide-vue-next';
+import { RefreshCw, LoaderCircle, CircleAlert, Search, ChevronRight, Inbox, Power } from 'lucide-vue-next';
 import type { InboxBucket, InboxData, InboxPr } from '../../../shared/types';
 import { inboxApi } from '../api';
 import { t, uiLang } from '../i18n';
 import { langCode } from '../store';
 import InboxRow from './InboxRow.vue';
+import LanguagePicker from '../components/LanguagePicker.vue';
 import { ago } from './ago';
 
 const data = ref<InboxData | null>(null);
@@ -16,6 +17,7 @@ const filter = ref('');
 const opening = ref('');
 const showReviewed = ref(false);
 const tick = ref(Date.now());
+const stopped = ref(false);
 
 const ORDER: InboxBucket[] = ['reviewing', 'new', 'triage', 'done', 'reviewed'];
 
@@ -74,6 +76,22 @@ const review = (p: InboxPr) => call(() => inboxApi.review(p.url));
 const cancel = (p: InboxPr) => call(() => inboxApi.cancel(p.url));
 const dismiss = (p: InboxPr) => call(() => inboxApi.dismiss(p.url));
 
+async function setLanguages(body: { reportLanguage: string; commentLanguage: string; persist: boolean }) {
+  try {
+    const l = await inboxApi.settings(body);
+    if (data.value) Object.assign(data.value, l);
+    uiLang.value = langCode(l.reportLanguage);
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+
+async function stop() {
+  if (!confirm(anyActive.value ? t.value.inbox.stopConfirmBusy : t.value.inbox.stopConfirm)) return;
+  await inboxApi.shutdown().catch(() => {});
+  stopped.value = true;
+}
+
 async function open(p: InboxPr, runDir: string) {
   // Open the tab now: browsers block window.open after an await.
   const w = window.open('', '_blank');
@@ -93,12 +111,13 @@ async function open(p: InboxPr, runDir: string) {
 
 // Poll while reviews run; otherwise re-read when the tab comes back after a while.
 let poll: ReturnType<typeof setInterval> | undefined;
-watch(anyActive, (on) => {
+watch([anyActive, stopped], ([on, off]) => {
   clearInterval(poll);
-  if (on) poll = setInterval(() => void load(), 2500);
+  if (on && !off) poll = setInterval(() => void load(), 2500);
 });
 const clock = setInterval(() => (tick.value = Date.now()), 30_000);
 function onFocus() {
+  if (stopped.value) return;
   const at = data.value?.fetchedAt ? Date.parse(data.value.fetchedAt) : 0;
   if (Date.now() - at > 60_000) void load();
 }
@@ -123,6 +142,7 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
 
 <template>
   <div v-if="loading" class="center muted"><LoaderCircle :size="22" class="spin" /></div>
+  <div v-else-if="stopped" class="center muted">{{ t.inbox.stopped }}</div>
 
   <div v-else class="page">
     <header class="bar">
@@ -139,9 +159,17 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
       <span class="grow" />
       <span v-if="data?.viewer" class="muted who">@{{ data.viewer }}</span>
       <span class="muted updated">{{ updated }}</span>
-      <button class="ghost" :disabled="refreshing" @click="load(true)">
+      <button class="ghost" :disabled="refreshing" :title="updated" @click="load(true)">
         <RefreshCw :size="14" :class="{ spin: refreshing }" /> {{ t.inbox.refresh }}
       </button>
+      <LanguagePicker
+        v-if="data"
+        :report="data.reportLanguage"
+        :comment="data.commentLanguage"
+        :save-label="t.inbox.saveDefault"
+        @apply="setLanguages"
+      />
+      <button class="ghost" :title="t.inbox.stop" @click="stop"><Power :size="15" /> {{ t.inbox.stop }}</button>
     </header>
 
     <main class="main">
@@ -443,6 +471,13 @@ button.ghead:hover h2 {
 }
 .state pre {
   margin: 4px 0 0;
+}
+/* Room for the group links first; the time is also in the Refresh button's tooltip. */
+@media (max-width: 1360px) {
+  .who,
+  .updated {
+    display: none;
+  }
 }
 @media (max-width: 960px) {
   .cols,

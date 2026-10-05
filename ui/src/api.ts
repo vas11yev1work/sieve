@@ -103,6 +103,13 @@ export const inboxApi = {
   cancel: (url: string) => post<InboxJob>('/api/inbox/cancel', { url }),
   dismiss: (url: string) => post<{ ok: boolean }>('/api/inbox/dismiss', { url }),
   open: (runDir: string) => post<{ url: string }>('/api/inbox/open', { runDir }),
+  settings: (body: { reportLanguage?: string; commentLanguage?: string; persist?: boolean }) =>
+    fetch('/api/inbox/settings', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ reportLanguage: string; commentLanguage: string }>(r)),
+  shutdown: () => post<{ ok: boolean }>('/api/inbox/shutdown', {}),
 };
 
 export interface StreamHandlers {
