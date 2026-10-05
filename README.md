@@ -125,7 +125,9 @@ Each row shows:
 
 - **On GitHub** — review decision and approvals, your last review and whether new commits came after it, CI checks, merge conflicts, unresolved threads, the team you were requested through, labels, size.
 - **In Sieve** — findings of the run on the current head by severity, how many are left to go through or ready to publish, the published review, whether a map was built; a run on an older commit is marked as such.
-- **Action** — Review / Open / Review again / Cancel. While a review runs, a bar shows its stages: prepare, one segment per reviewer agent, one per validated finding, finalize.
+- **Action** — Review / Open / Review again / Cancel. While a review runs, the Sieve column shows a progress ring and what it is doing ("Reviewers 2 of 4", "Checked 6 of 14 findings") with the elapsed time.
+
+The header has **Stop** (stops the inbox server, cancelling running and queued reviews) and the same language button as the review page; there "save as default" writes `~/.sieve/settings.json`, since the inbox spans projects.
 
 The inbox is off by default and reads **only** `~/.sieve/settings.json` (it spans repos, so a repo's settings never change it):
 
@@ -139,7 +141,7 @@ The inbox is off by default and reads **only** `~/.sieve/settings.json` (it span
     "owners": [], // ["acme"] — only these users / orgs
     "excludeRepos": [], // ["acme/legacy"]
     "includeDrafts": false,
-    "showReviewed": true, // the "You reviewed before" group
+    "showReviewed": true, // the "Earlier" group
     "checkouts": { "acme/web": "~/code/web" }, // where to run reviews from
   },
 }
@@ -164,7 +166,7 @@ Settings are merged in this order (later wins):
 4. `<repo>/.sieve/settings.local.json` — your personal overrides for this project, keep it out of git
 5. CLI flags (`--lang`, `--comment-lang`, `--min-severity`)
 
-Languages can also be switched in the UI (languages button in the header); "save as default" writes them to `settings.local.json`.
+Languages can also be switched in the UI (languages button in the header); "save as default" writes them to `settings.local.json` (in the inbox: to `~/.sieve/settings.json`).
 
 ```jsonc
 {
@@ -194,7 +196,7 @@ Full reference: [`schema/settings.schema.json`](schema/settings.schema.json). Ex
 
 ### Project rules
 
-By default Sieve looks for: `CLAUDE.md` and `AGENTS.md` (scoped to their folder and below), `.claude/rules/**/*.md`, `.sieve/rules/**/*.md`, `.cursor/rules/**/*.mdc`, `.cursorrules`, `.github/copilot-instructions.md`, `.github/instructions/**/*.md`, `CONTRIBUTING.md`. Rules are read from the PR head, so a PR that changes the rules is reviewed against its own version.
+By default Sieve looks for: `CLAUDE.md` and `AGENTS.md` (scoped to their folder and below), `.claude/rules/**/*.md`, `.sieve/rules/**/*.md`, `.cursor/rules/**/*.mdc`, `.cursorrules`, `.github/copilot-instructions.md`, `.github/instructions/**/*.md`, `CONTRIBUTING.md`. Rules — and project reviewers, `learned.md` and `.sieve/settings*.json` — are read from your local checkout, gitignored files included (rules are often a personal setup), not from the PR head. A repo Sieve had to clone into `~/.sieve/repos` has no working files there, so its reviews run with the built-in and `~/.sieve` reviewers only; for the inbox, point `inbox.checkouts` at your checkout.
 
 ### Custom reviewers
 
@@ -241,8 +243,9 @@ bun cli/sieve.ts inbox [--json] [--port n] [--no-open]   # inbox page (backgroun
 bun install
 bun run dev                     # API + Vite on a sample run (examples/dev-run) → http://localhost:5173
                                 # + the inbox on your real GitHub queue → http://localhost:5173/inbox
-                                #   (reviews there replay a recorded run; SIEVE_CLAUDE_BIN=claude for real ones)
-bun test                      # unit tests (diff parsing, anchors, review payload, map normalization)
+                                #   (reviews there replay a recorded run; SIEVE_CLAUDE_BIN=claude for real ones;
+                                #   FAKE_SPEED=0.2, FAKE_FINDINGS=40, FAKE_FAIL=1 tune the replay)
+bun test                      # unit tests (diff parsing, anchors, review payload, map normalization, inbox)
 bun run typecheck
 bun run build                 # build the UI into ui/dist
 bun cli/sieve.ts serve <runDir> --port 4545 --no-open
@@ -251,13 +254,13 @@ bun run dev:ui                # Vite dev server, proxies /api to :4545 (or $SIEV
 
 Try the plugin without installing: `claude --plugin-dir /path/to/sieve`, then `/sieve:review`.
 
-Server API (used by the UI): `GET /api/run`, `PATCH /api/findings/:id`, `POST /api/findings/:id/{chat,comment,reset}` (SSE for chat/comment), `GET /api/findings/:id/context`, `GET /api/code?file=&line=&endLine=`, `GET /api/map`, `POST /api/map/build` (SSE), `GET /api/map/progress` (SSE), `POST /api/map/cancel`, `POST /api/map/nodes/:flowId/:nodeId/{chat,reset}`, `GET /api/publish/preview`, `POST /api/publish`, `GET /api/export`. Inbox server: `GET /api/inbox[?refresh=1]`, `POST /api/inbox/{review,cancel,dismiss}` (`{ url }`), `POST /api/inbox/open` (`{ runDir }`).
+Server API (used by the UI): `GET /api/run`, `PATCH /api/findings/:id`, `POST /api/findings/:id/{chat,comment,reset}` (SSE for chat/comment), `GET /api/findings/:id/context`, `GET /api/code?file=&line=&endLine=`, `GET /api/map`, `POST /api/map/build` (SSE), `GET /api/map/progress` (SSE), `POST /api/map/cancel`, `POST /api/map/nodes/:flowId/:nodeId/{chat,reset}`, `GET /api/publish/preview`, `POST /api/publish`, `GET /api/export`. Inbox server: `GET /api/inbox[?refresh=1]`, `POST /api/inbox/{review,cancel,dismiss}` (`{ url }`), `POST /api/inbox/open` (`{ runDir }`), `PUT /api/inbox/settings`, `POST /api/inbox/shutdown`, `GET /api/inbox/ping`.
 
 ```
 .claude-plugin/        plugin + marketplace manifests
 skills/review/         SKILL.md (orchestrator), reviewers/, templates/
 skills/inbox/          SKILL.md (opens the inbox)
-cli/                   prepare / candidates / finalize / serve
+cli/                   prepare / candidates / finalize / serve / inbox
 server/                Hono API: findings, chat threads (SSE), PR map builds, GitHub publish; inbox + headless reviews
 ui/                    Vue 3 + Vite UI
 shared/types.ts        types shared by all of the above
