@@ -129,13 +129,13 @@ const en = {
     changes: 'Changes requested',
     required: 'Review required',
     noReviews: 'No reviews yet',
+    /** Your last review: [on the current commit, on an older one]. */
     my: {
-      APPROVED: 'You approved',
-      CHANGES_REQUESTED: 'You requested changes',
-      COMMENTED: 'You commented',
-      DISMISSED: 'Your review was dismissed',
-    } as Record<string, string>,
-    olderCommit: 'an older commit',
+      APPROVED: ['You approved', 'You approved an older commit'],
+      CHANGES_REQUESTED: ['You requested changes', 'You requested changes on an older commit'],
+      COMMENTED: ['You commented', 'You commented on an older commit'],
+      DISMISSED: ['Your review was dismissed', 'Your review was dismissed, new commits since'],
+    } as Record<string, [string, string]>,
     ci: {
       SUCCESS: 'Checks pass',
       FAILURE: 'Checks fail',
@@ -306,12 +306,11 @@ const ru: typeof en = {
     required: 'Нужно ревью',
     noReviews: 'Ревью ещё нет',
     my: {
-      APPROVED: 'Ты одобрил',
-      CHANGES_REQUESTED: 'Ты запросил изменения',
-      COMMENTED: 'Ты комментировал',
-      DISMISSED: 'Твоё ревью отклонено',
-    } as Record<string, string>,
-    olderCommit: 'более старый коммит',
+      APPROVED: ['Ты одобрил', 'Ты одобрил более старый коммит'],
+      CHANGES_REQUESTED: ['Ты запросил изменения', 'Ты запросил изменения в более старом коммите'],
+      COMMENTED: ['Ты комментировал', 'Ты комментировал более старый коммит'],
+      DISMISSED: ['Твоё ревью сброшено', 'Твоё ревью сброшено, есть новые коммиты'],
+    } as Record<string, [string, string]>,
     ci: {
       SUCCESS: 'Проверки прошли',
       FAILURE: 'Проверки упали',

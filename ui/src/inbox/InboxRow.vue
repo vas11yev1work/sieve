@@ -106,7 +106,7 @@ function act(kind: string) {
       <li :class="decision.cls"><component :is="decision.icon" :size="14" />{{ decision.text }}</li>
       <li v-if="pr.myReview" :class="{ warn: !pr.myReview.onHead }">
         <CircleDot :size="14" />
-        <span>{{ i.my[pr.myReview.state] || pr.myReview.state }} {{ pr.myReview.onHead ? '' : i.olderCommit }}</span>
+        <span>{{ i.my[pr.myReview.state]?.[pr.myReview.onHead ? 0 : 1] ?? pr.myReview.state }}</span>
       </li>
       <li v-if="ci" :class="ci.cls"><component :is="ci.icon" :size="14" />{{ ci.text }}</li>
       <li v-if="pr.mergeable === 'CONFLICTING'" class="bad"><GitMerge :size="14" />{{ i.conflicts }}</li>
