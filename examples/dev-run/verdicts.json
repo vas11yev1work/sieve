@@ -1,0 +1,29 @@
+[
+  {
+    "id": "f1",
+    "verdict": "valid",
+    "confidence": 0.92,
+    "reason": "Reproduced: hide bugs-logic and bugs-diff, open the map, click the finding — the review tab opens on another item."
+  },
+  {
+    "id": "f2",
+    "verdict": "invalid",
+    "confidence": 0.9,
+    "reason": "Intended: findings without reviewer attribution must stay visible regardless of the filter."
+  },
+  {
+    "id": "f3",
+    "verdict": "valid",
+    "confidence": 0.35,
+    "reason": "Theoretical: findings don't change during a session."
+  },
+  { "id": "f4", "verdict": "valid", "confidence": 0.8, "reason": "aria-expanded is missing on the toggle." },
+  {
+    "id": "f5",
+    "verdict": "valid",
+    "confidence": 0.88,
+    "reason": "No Escape or outside-click handling for filterOpen."
+  },
+  { "id": "f6", "verdict": "valid", "confidence": 0.7 },
+  { "id": "f7", "verdict": "valid", "confidence": 0.75 }
+]

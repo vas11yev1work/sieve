@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "createdAt": "2026-10-05T10:00:00Z",
+  "model": "sonnet",
+  "overview": {
+    "summary": "Replaces the category tabs in the review list with a per-reviewer filter. The filter lives in the shared UI store, so the list, the tab counts and keyboard navigation all respect it.",
+    "areas": ["Review tabs bar", "UI store", "Map → review navigation", "Global styles"],
+    "risks": ["Any code that selects a finding programmatically must account for hidden reviewers."]
+  },
+  "flows": [
+    {
+      "id": "toggle-reviewer",
+      "title": "Hide a reviewer's findings",
+      "description": "The user unchecks a reviewer; the list, counts and selection update.",
+      "trigger": "Click on a checkbox in the Reviewers popover",
+      "nodes": [
+        {
+          "id": "button",
+          "kind": "component",
+          "label": "App.vue → Reviewers button",
+          "file": "ui/src/App.vue",
+          "line": 258,
+          "endLine": 264,
+          "summary": "Opens the popover; shows `visible/total` when something is hidden.",
+          "change": "added",
+          "changeSummary": "New button replacing the All / Issues / Quality tabs."
+        },
+        {
+          "id": "toggle",
+          "kind": "component",
+          "label": "toggleReviewer(name)",
+          "file": "ui/src/App.vue",
+          "line": 51,
+          "endLine": 54,
+          "symbol": "toggleReviewer",
+          "summary": "Adds or removes the reviewer from `store.hiddenReviewers`.",
+          "change": "added"
+        },
+        {
+          "id": "store",
+          "kind": "store",
+          "label": "store.hiddenReviewers",
+          "file": "ui/src/store.ts",
+          "line": 25,
+          "summary": "Reactive list of hidden reviewer names.",
+          "change": "added"
+        },
+        {
+          "id": "match",
+          "kind": "util",
+          "label": "matchesTab / hidden",
+          "file": "ui/src/store.ts",
+          "line": 59,
+          "endLine": 66,
+          "symbol": "matchesTab",
+          "summary": "A finding is hidden when all of its reviewers are hidden.",
+          "change": "modified",
+          "changeSummary": "Category filter replaced with the reviewer check."
+        },
+        {
+          "id": "counts",
+          "kind": "util",
+          "label": "counts",
+          "file": "ui/src/store.ts",
+          "line": 70,
+          "endLine": 79,
+          "summary": "Tab counters skip hidden findings.",
+          "change": "modified"
+        },
+        {
+          "id": "watch",
+          "kind": "component",
+          "label": "watch(visible)",
+          "file": "ui/src/App.vue",
+          "line": 64,
+          "endLine": 66,
+          "summary": "Moves the selection to the first visible finding when the current one disappears.",
+          "change": "modified",
+          "changeSummary": "Now watches `visible` instead of the tab and kind."
+        }
+      ],
+      "edges": [
+        { "from": "button", "to": "toggle", "label": "@change", "kind": "event" },
+        { "from": "toggle", "to": "store", "label": "write", "kind": "data" },
+        { "from": "store", "to": "match", "label": "read", "kind": "data" },
+        { "from": "store", "to": "counts", "label": "read", "kind": "data" },
+        { "from": "match", "to": "watch", "label": "visible changes", "kind": "data" }
+      ]
+    },
+    {
+      "id": "map-to-finding",
+      "title": "Open a finding from the map",
+      "description": "Clicking a finding badge on a map node switches to the review tab and selects it.",
+      "trigger": "Click on a finding in the map node panel",
+      "nodes": [
+        {
+          "id": "panel",
+          "kind": "component",
+          "label": "MapNodePanel → finding link",
+          "file": "ui/src/components/MapNodePanel.vue",
+          "summary": "Lists findings linked to the node.",
+          "change": "unchanged"
+        },
+        {
+          "id": "show",
+          "kind": "util",
+          "label": "showFinding(id)",
+          "file": "ui/src/map.ts",
+          "line": 136,
+          "endLine": 142,
+          "symbol": "showFinding",
+          "summary": "Switches view and tab, then selects the finding.",
+          "change": "modified",
+          "changeSummary": "No longer resets the category filter; doesn't touch the reviewer filter."
+        },
+        {
+          "id": "watch",
+          "kind": "component",
+          "label": "watch(visible)",
+          "file": "ui/src/App.vue",
+          "line": 64,
+          "endLine": 66,
+          "summary": "Can override the selection if the finding is hidden.",
+          "change": "modified"
+        }
+      ],
+      "edges": [
+        { "from": "panel", "to": "show", "label": "click", "kind": "event" },
+        { "from": "show", "to": "watch", "label": "store.tab changes", "kind": "data" }
+      ]
+    }
+  ]
+}

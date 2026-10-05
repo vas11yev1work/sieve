@@ -1,0 +1,9 @@
+{
+  "title": "feat: filter findings by reviewer",
+  "body": "Replaces the All / Issues / Quality tabs with a **Reviewers** filter: a checklist of the reviewers that reported something in this run.\n\n- unchecking a reviewer hides its findings from the list and the tab counts\n- a finding stays visible while any of its reviewers is on\n- checkboxes get a custom style across the UI",
+  "author": "sieve-dev",
+  "baseRef": "main",
+  "headRef": "feat/reviewer-filter",
+  "baseSha": "2c2d1ce5790475d36c3652ec0bc7ec7cf0ce2a5f",
+  "headSha": "ea7247d25b02026d31c5dfd8436cc7e0257a119a"
+}

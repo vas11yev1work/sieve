@@ -195,6 +195,7 @@ bun cli/sieve.ts runs
 
 ```
 bun install
+bun run dev                     # API + Vite on a sample run (examples/dev-run) → http://localhost:5173
 bun test                      # unit tests (diff parsing, anchors, review payload, map normalization)
 bun run typecheck
 bun run build                 # build the UI into ui/dist

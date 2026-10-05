@@ -1,0 +1,87 @@
+[
+  {
+    "file": "ui/src/map.ts",
+    "line": 141,
+    "severity": "major",
+    "category": "bug",
+    "title": "Jumping from the map to a finding hidden by the reviewer filter selects nothing",
+    "explanation": "`showFinding` switches to the review tab and sets `store.selected`, but it ignores `store.hiddenReviewers`. If the finding's reviewers are all unchecked, the finding is not in `visible`, and the `watch(visible)` in `App.vue` immediately resets the selection to the first visible item. The user clicks a finding on the map and lands on a different one.",
+    "suggestion": "Un-hide the finding's reviewers before selecting it:\n\n```ts\nstore.hiddenReviewers = store.hiddenReviewers.filter((r) => !f.reviewers.includes(r));\n```",
+    "confidence": 0.9,
+    "reviewers": ["bugs-logic", "bugs-diff"]
+  },
+  {
+    "file": "ui/src/App.vue",
+    "line": 265,
+    "endLine": 271,
+    "severity": "minor",
+    "category": "rules",
+    "rule": { "path": "CLAUDE.md", "quote": "Every popover and dropdown closes on Escape and on a click outside it." },
+    "title": "Reviewer filter popover doesn't close on Escape or outside click",
+    "explanation": "The popover is only toggled by its own button. Escape is handled by the global key handler for the map only, and there is no outside-click listener, so the popover stays open over the list until the user finds the button again.",
+    "suggestion": "Close it in the existing `onKey` handler on Escape, and add a `pointerdown` listener on `window` that closes it when the target is outside `.filter-wrap`.",
+    "confidence": 0.85,
+    "reviewers": ["rules"]
+  },
+  {
+    "file": "ui/src/App.vue",
+    "line": 259,
+    "severity": "minor",
+    "category": "rules",
+    "rule": {
+      "path": "CLAUDE.md",
+      "quote": "Interactive elements expose their state to assistive tech (`aria-expanded`, `aria-pressed`, …)."
+    },
+    "title": "Filter button doesn't expose its open state",
+    "explanation": "The button opens a popover but has no `aria-expanded`, so screen readers can't tell whether the list is open.",
+    "suggestion": "```vue\n<button class=\"tab\" :aria-expanded=\"filterOpen\" …>\n```",
+    "confidence": 0.8,
+    "reviewers": ["rules"]
+  },
+  {
+    "file": "ui/src/App.vue",
+    "line": 49,
+    "severity": "minor",
+    "category": "bug",
+    "title": "Hidden reviewers that no longer have findings can't be re-enabled",
+    "explanation": "`reviewerNames` is derived from the current findings. Findings never disappear during a session, so this can't happen today, but `hiddenReviewers` is never reconciled with `reviewerNames` either.",
+    "confidence": 0.3,
+    "reviewers": ["bugs-diff"]
+  },
+  {
+    "file": "ui/src/styles.css",
+    "line": 230,
+    "severity": "nit",
+    "category": "quality",
+    "rule": {
+      "path": "CLAUDE.md",
+      "quote": "Colors come from the CSS variables in `styles.css`; no hard-coded colors in components."
+    },
+    "title": "Checkmark color is hard-coded to white",
+    "explanation": "The checkmark is a data-URI SVG with `stroke='white'`, so it ignores `--accent-text`. It works with both current themes, but a light accent would make it invisible.",
+    "suggestion": "Use the SVG as a `mask-image` on a `::before` with `background: var(--accent-text)`.",
+    "confidence": 0.7,
+    "reviewers": ["quality"]
+  },
+  {
+    "file": "ui/src/App.vue",
+    "line": 259,
+    "severity": "nit",
+    "category": "quality",
+    "title": "`active` class is bound to a number",
+    "explanation": "`{ active: store.hiddenReviewers.length }` works because Vue treats it as truthy, but the intent reads better as a boolean.",
+    "suggestion": "`{ active: store.hiddenReviewers.length > 0 }`",
+    "confidence": 0.75,
+    "reviewers": ["quality"]
+  },
+  {
+    "file": "ui/src/store.ts",
+    "line": 59,
+    "severity": "major",
+    "category": "bug",
+    "title": "Findings without reviewers can never be hidden",
+    "explanation": "`hidden` returns false when `f.reviewers` is empty, so such findings ignore the filter.",
+    "confidence": 0.4,
+    "reviewers": ["bugs-logic"]
+  }
+]

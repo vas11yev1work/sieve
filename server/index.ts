@@ -125,7 +125,7 @@ export function createApp(o: ServerOptions) {
       '',
       `Code at the reviewed revision (read-only): ${meta.worktree}`,
       `Full diff: ${P.patch}`,
-      rules.length ? `Project rules: ${rules.map((r) => join(meta.worktree, r.path)).join(', ')}` : '',
+      rules.length ? `Project rules: ${rules.map((r) => join(meta.repoRoot, r.path)).join(', ')}` : '',
       '',
       `Change: ${meta.title}${meta.url ? ` (${meta.url})` : ''}`,
       meta.body ? `Description:\n${meta.body.slice(0, 3000)}` : '',

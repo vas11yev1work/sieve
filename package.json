@@ -1,6 +1,6 @@
 {
   "name": "sieve-review",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Multi-agent AI code review for Claude Code with an interactive UI: discuss each finding, keep only what matters, publish to GitHub.",
   "type": "module",
   "license": "MIT",
@@ -8,6 +8,7 @@
     "sieve": "./cli/sieve.ts"
   },
   "scripts": {
+    "dev": "bun cli/dev.ts",
     "dev:ui": "vite --config ui/vite.config.ts",
     "build": "vite build --config ui/vite.config.ts",
     "typecheck": "tsc --noEmit && vue-tsc --noEmit -p ui/tsconfig.json",

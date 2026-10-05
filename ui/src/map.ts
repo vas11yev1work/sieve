@@ -137,6 +137,7 @@ export function showFinding(id: string) {
   const f = store.run?.findings.find((x) => x.id === id);
   if (!f) return;
   store.view = 'review';
+  store.hiddenReviewers = store.hiddenReviewers.filter((r) => !f.reviewers.includes(r));
   store.tab = f.filtered ? 'filtered' : store.run!.state.findings[id]?.status || 'open';
   store.selected = id;
 }

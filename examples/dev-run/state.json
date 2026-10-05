@@ -1,0 +1,33 @@
+{
+  "findings": {
+    "f1": {
+      "status": "accepted",
+      "comment": "Clicking a finding on the map while its reviewers are filtered out lands on a different finding: `watch(visible)` resets the selection. Un-hide the finding's reviewers in `showFinding` before selecting it.",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Is this real? The watch only runs when `visible` changes.",
+          "at": "2026-10-05T10:02:00Z",
+          "kind": "chat"
+        },
+        {
+          "role": "assistant",
+          "text": "Yes. `showFinding` changes `store.tab`, which changes `visible`, so the watcher runs right after. The finding isn't in `visible` because all its reviewers are hidden, so `store.selected` is replaced with `visible[0].id`.",
+          "at": "2026-10-05T10:02:20Z",
+          "kind": "chat"
+        },
+        {
+          "role": "assistant",
+          "text": "Clicking a finding on the map while its reviewers are filtered out lands on a different finding: `watch(visible)` resets the selection. Un-hide the finding's reviewers in `showFinding` before selecting it.",
+          "at": "2026-10-05T10:03:00Z",
+          "kind": "comment"
+        }
+      ]
+    },
+    "f7": {
+      "status": "rejected",
+      "rejectReason": "Both themes use a dark accent; not worth a mask-image refactor.",
+      "messages": []
+    }
+  }
+}
