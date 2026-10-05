@@ -28,7 +28,7 @@ export const store = reactive({
   errors: {} as Record<string, string>,
 });
 
-function langCode(l: string) {
+export function langCode(l: string) {
   const s = l.toLowerCase();
   if (s.startsWith('ru') || s.startsWith('рус')) return 'ru';
   return 'en';

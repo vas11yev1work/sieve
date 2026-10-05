@@ -7,15 +7,17 @@
  *   sieve candidates <runDir>    < merged reviewer findings (JSON array)
  *   sieve finalize <runDir>      < validator verdicts (JSON array, optional)
  *   sieve map <runDir>           < cartographer output (JSON object) → map.json
- *   sieve serve <runDir> [--port <n>] [--no-open]
+ *   sieve serve <runDir> [--port <n>] [--no-open] [--detach] [--idle-exit <min>]
  *   sieve runs                   list runs of the current repo
+ *   sieve inbox [--json] [--no-open]   PRs waiting for your review (UI, or JSON with --json)
  */
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, isAbsolute, relative } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { Finding, RawFinding, RunMeta, RunState, Settings, Severity } from '../shared/types.ts';
 import { SEVERITIES } from '../shared/types.ts';
-import { loadSettings } from './lib/settings.ts';
+import { loadSettings, SIEVE_HOME } from './lib/settings.ts';
+import { inboxSettings, rememberCheckout } from './lib/inbox.ts';
 import {
   parseInput,
   repoRootOf,
@@ -122,7 +124,8 @@ async function prepare(argv: string[]) {
     requireGh();
     const slugRepo = input.owner && input.repo ? { owner: input.owner, repo: input.repo } : currentRepoSlug(cwd);
     const pr = fetchPr(slugRepo.owner, slugRepo.repo, input.number);
-    const { root, remote } = ensureRepo(cwd, slugRepo.owner, slugRepo.repo);
+    const { root, remote, cloned } = ensureRepo(cwd, slugRepo.owner, slugRepo.repo);
+    if (!cloned) rememberCheckout(slugRepo.owner, slugRepo.repo, root);
     const id = `pr${pr.number}-${pr.headRefOid.slice(0, 7)}`;
     const runDir = join(root, '.sieve', 'runs', `${slugRepo.owner}-${slugRepo.repo}`.toLowerCase(), id);
 
@@ -418,25 +421,38 @@ async function serve(argv: string[]) {
       port: { type: 'string' },
       'no-open': { type: 'boolean', default: false },
       detach: { type: 'boolean', default: false },
+      'idle-exit': { type: 'string' },
     },
   });
   const runDir = resolve(positionals[0] || die('usage: sieve serve <runDir>'));
   if (!existsSync(paths(runDir).meta)) die(`Not a sieve run: ${runDir}`);
   if (!existsSync(paths(runDir).findings)) die(`Run is not finalized yet (no findings.json): ${runDir}`);
+  // Reviews started from the inbox run headless: the inbox opens the UI when the user asks.
+  if (process.env.SIEVE_HEADLESS) return out({ runDir, headless: true, hint: 'Started from the Sieve inbox: no UI.' });
 
-  if (values.detach) return serveDetached(runDir, values.port, !values['no-open']);
+  if (values.detach) {
+    const flags = [
+      ...(values.port ? ['--port', values.port] : []),
+      ...(values['no-open'] ? ['--no-open'] : []),
+      ...(values['idle-exit'] ? ['--idle-exit', values['idle-exit']] : []),
+    ];
+    const r = await detach(paths(runDir).server, join(runDir, 'server.log'), ['serve', runDir, ...flags], '/api/run');
+    if (r.reused && !values['no-open']) openUrl(r.url);
+    return out({ ...r, runDir });
+  }
   const { startServer } = await import('../server/index.ts');
   await startServer({
     runDir,
     sieveRoot: SIEVE_ROOT,
     port: values.port ? +values.port : undefined,
     open: !values['no-open'],
+    idleExitMin: values['idle-exit'] ? +values['idle-exit'] : undefined,
   });
 }
 
-async function alive(url: string): Promise<boolean> {
+async function alive(url: string, health: string): Promise<boolean> {
   try {
-    const r = await fetch(new URL('/api/run', url), { signal: AbortSignal.timeout(1500) });
+    const r = await fetch(new URL(health, url), { signal: AbortSignal.timeout(1500) });
     return r.ok;
   } catch {
     return false;
@@ -455,31 +471,84 @@ function openUrl(url: string) {
   } catch {}
 }
 
-/** Start the server in the background (or reuse a running one) and print its URL. */
-async function serveDetached(runDir: string, port: string | undefined, open: boolean) {
-  const info = paths(runDir).server;
+/**
+ * Run `sieve <args>` as a background server (or reuse the one in `info`) and return its URL.
+ * The server writes `{ url, pid }` to `info` once it listens.
+ */
+async function detach(info: string, log: string, args: string[], health: string) {
   const prev = readJson<{ url?: string }>(info, {});
-  if (prev.url && (await alive(prev.url))) {
-    if (open) openUrl(prev.url);
-    return out({ url: prev.url, runDir, reused: true });
-  }
+  if (prev.url && (await alive(prev.url, health))) return { url: prev.url, reused: true };
   rmSync(info, { force: true });
   const { spawn } = await import('node:child_process');
   const { openSync } = await import('node:fs');
-  const log = join(runDir, 'server.log');
+  mkdirSync(dirname(log), { recursive: true });
   const fd = openSync(log, 'a');
-  const args = [import.meta.path, 'serve', runDir, ...(port ? ['--port', port] : []), ...(open ? [] : ['--no-open'])];
-  const child = spawn(process.execPath, args, { detached: true, stdio: ['ignore', fd, fd] });
+  const child = spawn(process.execPath, [import.meta.path, ...args], { detached: true, stdio: ['ignore', fd, fd] });
   child.unref();
 
   const deadline = Date.now() + 180_000; // first run installs deps and builds the UI
   while (Date.now() < deadline) {
     await Bun.sleep(300);
     const cur = readJson<{ url?: string }>(info, {});
-    if (cur.url) return out({ url: cur.url, runDir, log });
+    if (cur.url) return { url: cur.url, log };
     if (child.exitCode !== null) break;
   }
   die(`Server did not start. See ${log}`);
+}
+
+// ───────────────────────────── inbox ─────────────────────────────
+
+const INBOX_OFF = 'The inbox is off. Turn it on in ~/.sieve/settings.json: { "inbox": { "enabled": true } }';
+
+async function inbox(argv: string[]) {
+  const { values } = parseArgs({
+    args: argv,
+    options: {
+      json: { type: 'boolean', default: false },
+      serve: { type: 'boolean', default: false },
+      port: { type: 'string' },
+      'no-open': { type: 'boolean', default: false },
+    },
+  });
+  const settings = inboxSettings();
+  if (!settings.inbox.enabled) die(INBOX_OFF);
+  requireGh();
+
+  if (values.json) {
+    const { inboxData } = await import('../server/inbox.ts');
+    return out(await inboxData(settings, new Map()));
+  }
+  // One fixed port, so the inbox can be bookmarked.
+  const port = Math.floor(Number(values.port ?? settings.inbox.port));
+  if (!(port > 0 && port < 65536)) die(`Invalid inbox port: ${values.port ?? settings.inbox.port}`);
+  if (values.serve) {
+    const { startInboxServer } = await import('../server/inbox.ts');
+    return void (await startInboxServer({ sieveRoot: SIEVE_ROOT, port, open: !values['no-open'] }));
+  }
+  const info = join(SIEVE_HOME, 'inbox.json');
+  // The port setting changed: stop the inbox still running on the old one.
+  const prev = readJson<{ url?: string; pid?: number }>(info, {});
+  if (prev.url && prev.pid && new URL(prev.url).port !== String(port)) {
+    try {
+      process.kill(prev.pid);
+    } catch {}
+    rmSync(info, { force: true });
+  }
+  if (!(await alive(`http://127.0.0.1:${port}/`, '/api/inbox/ping'))) {
+    try {
+      Bun.serve({ port, hostname: '127.0.0.1', fetch: () => new Response() }).stop(true);
+    } catch {
+      die(`Port ${port} is taken by another program. Set "inbox.port" in ~/.sieve/settings.json.`);
+    }
+  }
+  const r = await detach(
+    info,
+    join(SIEVE_HOME, 'inbox.log'),
+    ['inbox', '--serve', '--port', String(port), ...(values['no-open'] ? ['--no-open'] : [])],
+    '/api/inbox/ping',
+  );
+  if (r.reused && !values['no-open']) openUrl(r.url + 'inbox');
+  out(r);
 }
 
 function runs() {
@@ -528,15 +597,19 @@ try {
     case 'runs':
       runs();
       break;
+    case 'inbox':
+      await inbox(rest);
+      break;
     default:
       process.stdout.write(
-        'usage: sieve <prepare|candidates|finalize|map|serve|runs> …\n' +
+        'usage: sieve <prepare|candidates|finalize|map|serve|runs|inbox> …\n' +
           '  prepare [PR url | owner/repo#n | n] [--base ref] [--lang l] [--comment-lang l] [--only a,b] [--skip a,b] [--min-severity s] [--force]\n' +
           '  candidates <runDir>   < findings JSON\n' +
           '  finalize <runDir>     < verdicts JSON\n' +
           '  map <runDir>          < cartographer JSON\n' +
-          '  serve <runDir> [--port n] [--no-open]\n' +
-          '  runs\n',
+          '  serve <runDir> [--port n] [--no-open] [--detach] [--idle-exit min]\n' +
+          '  runs\n' +
+          '  inbox [--json] [--port n] [--no-open]\n',
       );
       process.exit(cmd ? 1 : 0);
   }

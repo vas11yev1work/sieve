@@ -39,6 +39,17 @@ export const DEFAULT_SETTINGS: Settings = {
     '**/*.snap',
     '**/dist/**',
   ],
+  inbox: {
+    enabled: false,
+    port: 7438,
+    requested: 'me-or-team',
+    repos: [],
+    owners: [],
+    excludeRepos: [],
+    includeDrafts: false,
+    showReviewed: true,
+    checkouts: {},
+  },
 };
 
 function readJson(path: string): Record<string, unknown> | null {

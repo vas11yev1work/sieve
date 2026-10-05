@@ -130,6 +130,115 @@ export interface Settings {
   map: { mode: 'on-demand' | 'always' | 'off'; model: string };
   /** Glob patterns of files to exclude from review (lockfiles, generated code…). */
   ignore: string[];
+  /** PRs waiting for your review, across repos. Read from ~/.sieve/settings.json only. */
+  inbox: InboxSettings;
+}
+
+export interface InboxSettings {
+  enabled: boolean;
+  /** Fixed port of the inbox page, so it can be bookmarked. */
+  port: number;
+  /** "me" = requested from you personally; "me-or-team" = also via a team you are in. */
+  requested: 'me' | 'me-or-team';
+  /** "owner/repo"; empty = all repos. */
+  repos: string[];
+  /** Users / orgs; empty = all. */
+  owners: string[];
+  excludeRepos: string[];
+  includeDrafts: boolean;
+  /** Also list open PRs you reviewed before that no longer request you. */
+  showReviewed: boolean;
+  /** "owner/repo" → local checkout to run reviews from (its rules, gitignored ones included). */
+  checkouts: Record<string, string>;
+}
+
+// ───────────── Inbox ─────────────
+
+export type InboxBucket = 'reviewing' | 'new' | 'triage' | 'done' | 'reviewed';
+
+/** A Sieve run of one PR found on disk. */
+export interface InboxRun {
+  runDir: string;
+  headSha: string;
+  createdAt: string;
+  /** Run is on the PR's current head. */
+  onHead: boolean;
+  /** Not filtered out by validation, by severity. */
+  findings: Record<Severity, number>;
+  filtered: number;
+  status: Record<FindingStatus, number>;
+  /** Accepted, with a comment, not published yet. */
+  unpublished: number;
+  reviews: { at: string; url?: string; count: number }[];
+  map: boolean;
+  /** URL of its UI server when one is running. */
+  url?: string;
+}
+
+export interface InboxAgent {
+  id: string;
+  name: string;
+  phase: 'review' | 'validate' | 'map';
+  done: boolean;
+}
+
+export interface InboxJob {
+  url: string;
+  state: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
+  phase: 'queued' | 'prepare' | 'review' | 'validate' | 'finalize' | 'done';
+  agents: InboxAgent[];
+  queuedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  error?: string;
+  runDir?: string;
+  log?: string;
+}
+
+export interface InboxPr {
+  url: string;
+  owner: string;
+  repo: string;
+  number: number;
+  title: string;
+  author: string;
+  isDraft: boolean;
+  createdAt: string;
+  updatedAt: string;
+  headSha: string;
+  headRef: string;
+  baseRef: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  labels: { name: string; color: string }[];
+  /** Why it is in the inbox: requested from you, from your team, or you reviewed it before. */
+  requested: 'me' | 'team' | null;
+  teams: string[];
+  decision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+  approvals: number;
+  changesRequested: number;
+  myReview?: { state: string; at: string; sha?: string; onHead: boolean };
+  ci: 'SUCCESS' | 'FAILURE' | 'ERROR' | 'PENDING' | 'EXPECTED' | null;
+  mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
+  threads: { total: number; unresolved: number };
+  comments: number;
+  /** Local checkout reviews run from (otherwise a clone in ~/.sieve/repos). */
+  checkout?: string;
+  /** Newest first. */
+  runs: InboxRun[];
+  job?: InboxJob;
+  bucket: InboxBucket;
+}
+
+export interface InboxData {
+  enabled: boolean;
+  viewer?: string;
+  query?: string;
+  fetchedAt?: string;
+  error?: string;
+  reportLanguage: string;
+  prs: InboxPr[];
 }
 
 export interface ParsedDiffLine {

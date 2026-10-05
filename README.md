@@ -111,6 +111,49 @@ When the map is built is set by `map.mode`:
 
 "Rebuild" replaces the map and resets the step chats. Nothing from the map is ever posted to GitHub.
 
+## Inbox
+
+```
+/sieve:inbox
+```
+
+A page at `http://127.0.0.1:7438/inbox` (always the same port, `inbox.port`) with every open PR that requests your review, across all repos your `gh` token can see — with what GitHub says about it and what Sieve has done with it. Start a review with one click; it runs in the background and the page shows how far it got.
+
+PRs are grouped by what you need to do: **Reviewing** (Sieve agents are on it), **Needs review** (no Sieve run on the latest commit), **Findings to go through**, **Done for this commit** (published, or nothing left to triage) and **You reviewed before** (open PRs you reviewed that no longer request you).
+
+Each row shows:
+
+- **On GitHub** — review decision and approvals, your last review and whether new commits came after it, CI checks, merge conflicts, unresolved threads, the team you were requested through, labels, size.
+- **In Sieve** — findings of the run on the current head by severity, how many are left to go through or ready to publish, the published review, whether a map was built; a run on an older commit is marked as such.
+- **Action** — Review / Open / Review again / Cancel. While a review runs, a bar shows its stages: prepare, one segment per reviewer agent, one per validated finding, finalize.
+
+The inbox is off by default and reads **only** `~/.sieve/settings.json` (it spans repos, so a repo's settings never change it):
+
+```jsonc
+{
+  "inbox": {
+    "enabled": true,
+    "port": 7438, // always http://127.0.0.1:7438/inbox — bookmark it
+    "requested": "me-or-team", // "me" = only requested from you personally, not via a team
+    "repos": [], // ["acme/web"] — only these repos; empty = all
+    "owners": [], // ["acme"] — only these users / orgs
+    "excludeRepos": [], // ["acme/legacy"]
+    "includeDrafts": false,
+    "showReviewed": true, // the "You reviewed before" group
+    "checkouts": { "acme/web": "~/code/web" }, // where to run reviews from
+  },
+}
+```
+
+How a review started from the inbox runs:
+
+- `claude -p "/sieve:review <url>"` — the same skill, headless, with your Claude Code login. It may use `bun`, `git`, `gh`, read-only tools and subagents without asking; anything else is denied. One review at a time, the rest are queued.
+- It runs from the repo's local checkout when Sieve knows one: from `checkouts`, or a checkout you already ran `/sieve:review` in (remembered in `~/.sieve/checkouts.json`). Otherwise the repo is cloned to `~/.sieve/repos/<owner>/<repo>`.
+- It does not open a browser. **Open** starts the run's UI on its own port; that server stops after 2 hours without requests.
+- The orchestrator's output is kept in `~/.sieve/logs/inbox-<owner>-<repo>-<n>.jsonl`; a failed review shows its error and the log path.
+
+GitHub is asked at most once a minute (Refresh asks right away). Organizations with SSO need the `gh` token authorized for them, otherwise their PRs are missing.
+
 ## Configuration
 
 Settings are merged in this order (later wins):
@@ -187,8 +230,9 @@ bun cli/sieve.ts prepare [PR] [--base ref] [--lang l] [--comment-lang l] [--only
 bun cli/sieve.ts candidates <runDir>  < findings.json
 bun cli/sieve.ts finalize <runDir>    < verdicts.json
 bun cli/sieve.ts map <runDir>         < map.json        # normalize the cartographer's output into map.json
-bun cli/sieve.ts serve <runDir> [--port n] [--no-open] [--detach]
+bun cli/sieve.ts serve <runDir> [--port n] [--no-open] [--detach] [--idle-exit min]
 bun cli/sieve.ts runs
+bun cli/sieve.ts inbox [--json] [--port n] [--no-open]   # inbox page (background server), or its data as JSON
 ```
 
 ## Development
@@ -196,6 +240,8 @@ bun cli/sieve.ts runs
 ```
 bun install
 bun run dev                     # API + Vite on a sample run (examples/dev-run) → http://localhost:5173
+                                # + the inbox on your real GitHub queue → http://localhost:5173/inbox
+                                #   (reviews there replay a recorded run; SIEVE_CLAUDE_BIN=claude for real ones)
 bun test                      # unit tests (diff parsing, anchors, review payload, map normalization)
 bun run typecheck
 bun run build                 # build the UI into ui/dist
@@ -205,13 +251,14 @@ bun run dev:ui                # Vite dev server, proxies /api to :4545 (or $SIEV
 
 Try the plugin without installing: `claude --plugin-dir /path/to/sieve`, then `/sieve:review`.
 
-Server API (used by the UI): `GET /api/run`, `PATCH /api/findings/:id`, `POST /api/findings/:id/{chat,comment,reset}` (SSE for chat/comment), `GET /api/findings/:id/context`, `GET /api/code?file=&line=&endLine=`, `GET /api/map`, `POST /api/map/build` (SSE), `GET /api/map/progress` (SSE), `POST /api/map/cancel`, `POST /api/map/nodes/:flowId/:nodeId/{chat,reset}`, `GET /api/publish/preview`, `POST /api/publish`, `GET /api/export`.
+Server API (used by the UI): `GET /api/run`, `PATCH /api/findings/:id`, `POST /api/findings/:id/{chat,comment,reset}` (SSE for chat/comment), `GET /api/findings/:id/context`, `GET /api/code?file=&line=&endLine=`, `GET /api/map`, `POST /api/map/build` (SSE), `GET /api/map/progress` (SSE), `POST /api/map/cancel`, `POST /api/map/nodes/:flowId/:nodeId/{chat,reset}`, `GET /api/publish/preview`, `POST /api/publish`, `GET /api/export`. Inbox server: `GET /api/inbox[?refresh=1]`, `POST /api/inbox/{review,cancel,dismiss}` (`{ url }`), `POST /api/inbox/open` (`{ runDir }`).
 
 ```
 .claude-plugin/        plugin + marketplace manifests
 skills/review/         SKILL.md (orchestrator), reviewers/, templates/
+skills/inbox/          SKILL.md (opens the inbox)
 cli/                   prepare / candidates / finalize / serve
-server/                Hono API: findings, chat threads (SSE), PR map builds, GitHub publish
+server/                Hono API: findings, chat threads (SSE), PR map builds, GitHub publish; inbox + headless reviews
 ui/                    Vue 3 + Vite UI
 shared/types.ts        types shared by all of the above
 schema/                JSON schema for settings

@@ -1,4 +1,14 @@
-import type { ChatThread, Finding, FindingState, MapStatus, ParsedHunk, RunState, Settings } from '../../shared/types';
+import type {
+  ChatThread,
+  Finding,
+  FindingState,
+  InboxData,
+  InboxJob,
+  MapStatus,
+  ParsedHunk,
+  RunState,
+  Settings,
+} from '../../shared/types';
 
 export interface RunData {
   meta: {
@@ -80,6 +90,19 @@ export const api = {
     }).then((r) => json<{ url?: string; count: number; state: RunState }>(r)),
   exportMd: () => fetch('/api/export').then((r) => r.text()),
   shutdown: () => fetch('/api/shutdown', { method: 'POST' }).then((r) => json<{ ok: boolean }>(r)),
+};
+
+const post = <T>(url: string, body: unknown) =>
+  fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(
+    (r) => json<T>(r),
+  );
+
+export const inboxApi = {
+  load: (refresh = false) => fetch(`/api/inbox${refresh ? '?refresh=1' : ''}`).then((r) => json<InboxData>(r)),
+  review: (url: string) => post<InboxJob>('/api/inbox/review', { url }),
+  cancel: (url: string) => post<InboxJob>('/api/inbox/cancel', { url }),
+  dismiss: (url: string) => post<{ ok: boolean }>('/api/inbox/dismiss', { url }),
+  open: (runDir: string) => post<{ url: string }>('/api/inbox/open', { runDir }),
 };
 
 export interface StreamHandlers {

@@ -98,6 +98,51 @@
         "port": { "type": "integer", "description": "0 = random free port", "default": 0 },
         "open": { "type": "boolean", "description": "Open the browser automatically", "default": true }
       }
+    },
+    "inbox": {
+      "type": "object",
+      "description": "PRs waiting for your review, across repos (`sieve inbox`, /sieve:inbox). Read from ~/.sieve/settings.json only.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Fixed port of the inbox page (http://127.0.0.1:<port>/inbox), so it can be bookmarked.",
+          "default": 7438
+        },
+        "requested": {
+          "enum": ["me", "me-or-team"],
+          "description": "me = requested from you personally; me-or-team = also via a team you are in (e.g. CODEOWNERS).",
+          "default": "me-or-team"
+        },
+        "repos": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Only these repos (\"owner/repo\"). Empty = all.",
+          "default": []
+        },
+        "owners": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Only repos of these users / orgs. Empty = all.",
+          "default": []
+        },
+        "excludeRepos": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "includeDrafts": { "type": "boolean", "default": false },
+        "showReviewed": {
+          "type": "boolean",
+          "description": "Also list open PRs you reviewed before that no longer request you.",
+          "default": true
+        },
+        "checkouts": {
+          "type": "object",
+          "description": "\"owner/repo\" → path of a local checkout to run reviews from (its rules, gitignored ones included). Repos you reviewed from a checkout are remembered automatically.",
+          "additionalProperties": { "type": "string" },
+          "default": {}
+        }
+      }
     }
   }
 }

@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, extname, dirname, resolve, sep } from 'node:path';
 import type { ChatThread, Finding, FindingState, RunMeta, RunState, Settings } from '../shared/types.ts';
 import { loadSettings, languageName } from '../cli/lib/settings.ts';
@@ -16,6 +16,8 @@ export interface ServerOptions {
   sieveRoot: string;
   port?: number;
   open?: boolean;
+  /** Exit after this many minutes without requests (servers opened from the inbox). */
+  idleExitMin?: number;
 }
 
 const MIME: Record<string, string> = {
@@ -44,7 +46,22 @@ export function ensureUi(sieveRoot: string) {
   if (!b.ok) throw new Error(`UI build failed:\n${b.stderr || b.stdout}`);
 }
 
-function openBrowser(url: string) {
+/** Serves the built UI; unknown paths get index.html (the UI picks the page by path). */
+export function staticUi(sieveRoot: string) {
+  const dist = join(sieveRoot, 'ui', 'dist');
+  return (c: Context) => {
+    const p = decodeURIComponent(new URL(c.req.url).pathname);
+    if (p.includes('..')) return c.text('bad path', 400);
+    let file = join(dist, p);
+    if (p === '/' || !existsSync(file) || !extname(file)) file = join(dist, 'index.html');
+    if (!existsSync(file)) return c.text('UI is not built. Run `bun run build` in the sieve folder.', 500);
+    return new Response(Bun.file(file), {
+      headers: { 'content-type': MIME[extname(file)] || 'application/octet-stream' },
+    });
+  };
+}
+
+export function openBrowser(url: string) {
   const cmd =
     process.platform === 'darwin'
       ? ['open', url]
@@ -380,18 +397,7 @@ export function createApp(o: ServerOptions) {
     return c.json({ ok: true });
   });
 
-  // Static UI
-  const dist = join(o.sieveRoot, 'ui', 'dist');
-  app.get('*', (c) => {
-    const p = decodeURIComponent(new URL(c.req.url).pathname);
-    if (p.includes('..')) return c.text('bad path', 400);
-    let file = join(dist, p);
-    if (p === '/' || !existsSync(file) || !extname(file)) file = join(dist, 'index.html');
-    if (!existsSync(file)) return c.text('UI is not built. Run `bun run build` in the sieve folder.', 500);
-    return new Response(Bun.file(file), {
-      headers: { 'content-type': MIME[extname(file)] || 'application/octet-stream' },
-    });
-  });
+  app.get('*', staticUi(o.sieveRoot));
 
   return app;
 }
@@ -400,14 +406,27 @@ export async function startServer(o: ServerOptions) {
   ensureUi(o.sieveRoot);
   const app = createApp(o);
   const settings = loadSettings(readJson<RunMeta>(paths(o.runDir).meta).repoRoot);
+  let lastHit = Date.now();
   const server = Bun.serve({
     port: o.port ?? settings.server.port ?? 0,
     hostname: '127.0.0.1',
-    fetch: app.fetch,
+    fetch: (req, srv) => {
+      lastHit = Date.now();
+      return app.fetch(req, srv);
+    },
     idleTimeout: 0, // chat responses can take a while
   });
   const url = `http://127.0.0.1:${server.port}/`;
-  writeJson(paths(o.runDir).server, { url, pid: process.pid, startedAt: new Date().toISOString() });
+  const info = paths(o.runDir).server;
+  writeJson(info, { url, pid: process.pid, startedAt: new Date().toISOString() });
+  if (o.idleExitMin) {
+    const ms = o.idleExitMin * 60_000;
+    setInterval(() => {
+      if (Date.now() - lastHit < ms) return;
+      rmSync(info, { force: true });
+      process.exit(0);
+    }, 60_000).unref();
+  }
   process.stdout.write(JSON.stringify({ url, runDir: o.runDir }) + '\n');
   if (o.open ?? settings.server.open) openBrowser(url);
   return server;

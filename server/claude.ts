@@ -7,7 +7,11 @@ export interface ClaudeRunOptions {
   cwd: string;
   prompt: string;
   model?: string;
-  tools?: string[];
+  /** Built-in tools Claude may use; 'all' keeps Claude Code's full set (permissions still apply). */
+  tools?: string[] | 'all';
+  /** Tools that run without a permission prompt (`--allowedTools`); others are denied in headless mode. */
+  allowedTools?: string[];
+  env?: Record<string, string>;
   addDirs?: string[];
   /** Continue an existing session. */
   resume?: string;
@@ -17,6 +21,9 @@ export interface ClaudeRunOptions {
   ephemeral?: boolean;
   onText?: (delta: string) => void;
   onTool?: (label: string) => void;
+  /** Every stream-json event, as is. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped claude stream-json events
+  onEvent?: (ev: any) => void;
   signal?: AbortSignal;
 }
 
@@ -41,15 +48,16 @@ export async function runClaude(o: ClaudeRunOptions): Promise<ClaudeRunResult> {
   else if (o.systemPrompt) args.push('--append-system-prompt', o.systemPrompt);
   if (o.ephemeral) args.push('--no-session-persistence');
   for (const d of o.addDirs || []) args.push('--add-dir', d);
+  if (o.allowedTools?.length) args.push('--allowedTools', o.allowedTools.join(','));
   // Variadic flag goes last; the prompt is sent on stdin.
-  args.push('--tools', ...(o.tools?.length ? o.tools : ['Read', 'Grep', 'Glob']));
+  if (o.tools !== 'all') args.push('--tools', ...(o.tools?.length ? o.tools : ['Read', 'Grep', 'Glob']));
 
   const proc = Bun.spawn(args, {
     cwd: o.cwd,
     stdin: new TextEncoder().encode(o.prompt),
     stdout: 'pipe',
     stderr: 'pipe',
-    env: { ...process.env },
+    env: { ...process.env, ...o.env },
   });
   o.signal?.addEventListener('abort', () => proc.kill());
 
@@ -69,6 +77,7 @@ export async function runClaude(o: ClaudeRunOptions): Promise<ClaudeRunResult> {
     } catch {
       return;
     }
+    o.onEvent?.(ev);
     if (ev.session_id && !sessionId) sessionId = ev.session_id;
     if (ev.type === 'stream_event') {
       const e = ev.event;

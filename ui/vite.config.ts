@@ -9,7 +9,11 @@ export default defineConfig({
   plugins: [vue()],
   build: { outDir: 'dist', emptyOutDir: true },
   server: {
-    // `SIEVE_API=http://127.0.0.1:PORT bun run dev:ui` to develop against a running `sieve serve`
-    proxy: { '/api': process.env.SIEVE_API || 'http://127.0.0.1:4545' },
+    // `SIEVE_API=http://127.0.0.1:PORT bun run dev:ui` to develop against a running `sieve serve`;
+    // the inbox API is a separate server (`sieve inbox --serve`). More specific prefix first.
+    proxy: {
+      '/api/inbox': process.env.SIEVE_INBOX_API || 'http://127.0.0.1:4546',
+      '/api': process.env.SIEVE_API || 'http://127.0.0.1:4545',
+    },
   },
 });

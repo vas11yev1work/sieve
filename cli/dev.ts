@@ -4,6 +4,8 @@
  * Builds `.sieve/runs/dev` from `examples/dev-run` (a fake PR on a real commit of this repo,
  * so the diff and the code are real), pushes the findings through `candidates` + `finalize`,
  * then starts the API on :4545 and the Vite dev server that proxies to it.
+ * Also starts the inbox API on :4546 (http://localhost:5173/inbox) on your real GitHub queue; reviews started
+ * there replay a recorded run (examples/dev-run/fake-claude.ts) unless SIEVE_CLAUDE_BIN=claude.
  */
 import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -17,6 +19,7 @@ const ROOT = resolve(import.meta.dir, '..');
 const FIXTURE = join(ROOT, 'examples', 'dev-run');
 const RUN = join(ROOT, '.sieve', 'runs', 'dev');
 const PORT = 4545;
+const INBOX_PORT = 4546;
 
 const fx = readJson<Omit<RunMeta, 'id' | 'mode' | 'createdAt' | 'repoRoot' | 'worktree' | 'runDir' | 'changedFiles'>>(
   join(FIXTURE, 'run.json'),
@@ -64,10 +67,25 @@ const procs = [
     stdout: 'ignore',
     stderr: 'inherit',
   }),
+  Bun.spawn(['bun', cli, 'inbox', '--serve', '--port', String(INBOX_PORT), '--no-open'], {
+    cwd: ROOT,
+    stdout: 'ignore',
+    stderr: 'inherit',
+    env: {
+      ...process.env,
+      SIEVE_INBOX_FORCE: '1',
+      SIEVE_CLAUDE_BIN: process.env.SIEVE_CLAUDE_BIN || join(FIXTURE, 'fake-claude.ts'),
+      FAKE_RUN: RUN,
+    },
+  }),
   Bun.spawn(['bun', 'run', 'dev:ui'], {
     cwd: ROOT,
     stdio: ['inherit', 'inherit', 'inherit'],
-    env: { ...process.env, SIEVE_API: `http://127.0.0.1:${PORT}` },
+    env: {
+      ...process.env,
+      SIEVE_API: `http://127.0.0.1:${PORT}`,
+      SIEVE_INBOX_API: `http://127.0.0.1:${INBOX_PORT}`,
+    },
   }),
 ];
 const stop = () => {

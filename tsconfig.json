@@ -10,5 +10,5 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true
   },
-  "include": ["cli/**/*.ts", "server/**/*.ts", "shared/**/*.ts", "tests/**/*.ts"]
+  "include": ["cli/**/*.ts", "server/**/*.ts", "shared/**/*.ts", "tests/**/*.ts", "examples/**/*.ts"]
 }
