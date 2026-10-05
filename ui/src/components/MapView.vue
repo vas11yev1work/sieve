@@ -179,7 +179,8 @@ function rebuild() {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  height: var(--bar-h);
+  padding: 0 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
@@ -228,7 +229,7 @@ function rebuild() {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(340px, 420px);
+  grid-template-columns: var(--col-left) minmax(0, 1fr) var(--col-right);
   grid-template-rows: minmax(0, 1fr);
 }
 .col {
@@ -295,7 +296,7 @@ function rebuild() {
 }
 @media (max-width: 1100px) {
   .grid {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: var(--col-left-narrow) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
   }
   .panel-col {
