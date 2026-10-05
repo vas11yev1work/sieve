@@ -226,8 +226,16 @@ async function prepare(argv: string[]) {
   const plan = reviewers.map((r) => {
     const file = join(p.prompts, `review-${r.name}.md`);
     writeFileSync(file, reviewerPrompt(SIEVE_ROOT, meta, settings, files, rules, r));
-    return { name: r.name, model: r.model, description: r.description, prompt: file };
+    return {
+      name: r.name,
+      model: r.model,
+      description: r.description,
+      prompt: file,
+      tools: r.tools,
+      validate: r.validate,
+    };
   });
+  writeJson(p.reviewers, plan);
 
   let map: { model: string; prompt: string } | undefined;
   if (settings.map.mode === 'always') {
@@ -330,14 +338,25 @@ async function candidates(argv: string[]) {
     f.id = `f${i + 1}`;
     f.inDiff = !!f.anchor;
   });
+  // Findings only from reviewers with `validate: false` were checked with tools the validator lacks.
+  const noValidate = new Set(
+    readJson<{ name: string; validate?: boolean }[]>(paths(runDir).reviewers, [])
+      .filter((r) => r.validate === false)
+      .map((r) => r.name),
+  );
+  for (const f of kept)
+    if (f.reviewers.length && f.reviewers.every((n) => noValidate.has(n)))
+      f.validation = { verdict: 'skipped', reason: 'checked by the reviewer, not validated' };
   writeJson(paths(runDir).candidates, kept);
 
   const validate = settings.validation.enabled
-    ? kept.map((f) => {
-        const file = join(paths(runDir).prompts, `validate-${f.id}.md`);
-        writeFileSync(file, validatorPrompt(SIEVE_ROOT, meta, settings, files, f));
-        return { id: f.id, model: validatorModel(settings, f), title: f.title, prompt: file };
-      })
+    ? kept
+        .filter((f) => !f.validation.reason)
+        .map((f) => {
+          const file = join(paths(runDir).prompts, `validate-${f.id}.md`);
+          writeFileSync(file, validatorPrompt(SIEVE_ROOT, meta, settings, files, f));
+          return { id: f.id, model: validatorModel(settings, f), title: f.title, prompt: file };
+        })
     : [];
 
   out({ count: kept.length, dropped, validation: settings.validation.enabled, validate });
@@ -366,7 +385,7 @@ async function finalize(argv: string[]) {
   for (const f of cands) {
     const v = verdicts.get(f.id);
     if (!v) {
-      f.validation = { verdict: 'skipped' };
+      f.validation = { verdict: 'skipped', reason: f.validation?.reason };
       continue;
     }
     f.validation = {

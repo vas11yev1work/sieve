@@ -29,7 +29,7 @@ Description from the author (use it to understand intent, not as a source of tru
 {{rulesSection}}
 {{learnedSection}}
 
-You may read any file in the worktree and run read-only git commands there (`git -C {{worktree}} log/blame/show`). Never modify files, never run builds, tests, linters or installs.
+{{permissionsSection}}
 
 ## What to report
 

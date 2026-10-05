@@ -7,6 +7,7 @@ export const paths = (runDir: string) => ({
   patch: join(runDir, 'diff.patch'),
   diff: join(runDir, 'diff.json'),
   rules: join(runDir, 'rules.json'),
+  reviewers: join(runDir, 'reviewers.json'),
   raw: join(runDir, 'raw'),
   candidates: join(runDir, 'candidates.json'),
   findings: join(runDir, 'findings.json'),

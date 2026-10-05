@@ -224,6 +224,18 @@ Review only Vue-specific problems in the changed files: lost reactivity, …
 
 The body is the reviewer's focus; Sieve wraps it with the PR context, the diff location, the applicable rules, the output format and the shared "high-signal only" guidelines ([`skills/review/templates/reviewer.md`](skills/review/templates/reviewer.md)). See [`examples/.sieve/reviewers/vue.md`](examples/.sieve/reviewers/vue.md).
 
+Reviewers are read-only by default. A reviewer that has to run something — say, start the app and click through it in a browser — lists the extra tools it may use, comma-separated, and can opt out of validation (the validator only reads code, so it would reject what was checked in the browser):
+
+```markdown
+---
+name: browser
+tools: mcp__chrome-devtools, Bash(yarn:*), Bash(kill:*)
+validate: false
+---
+```
+
+The inbox grants these tools to its headless runs. For an interactive `/sieve:review`, add them to `.claude/settings.local.json` to avoid a prompt on every call. Everything else (installing deps, which port to use, stopping the dev server) belongs in the reviewer's own text.
+
 ### Learning from rejections
 
 When you reject a finding with a reason and keep "Remember for future reviews" checked, the reason is appended to `<repo>/.sieve/learned.md`. Every reviewer reads that file next time. Commit it to share with the team, or keep it local.

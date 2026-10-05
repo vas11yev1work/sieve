@@ -13,6 +13,10 @@ export interface Reviewer {
   source: string;
   file: string;
   body: string;
+  /** Extra tools beyond read-only (`tools:` in frontmatter, comma-separated), e.g. a browser MCP. */
+  tools: string[];
+  /** false → its findings skip the validator (it checked them with tools the validator lacks). */
+  validate: boolean;
 }
 
 export function parseFrontmatter(text: string): { data: Record<string, string>; body: string } {
@@ -42,6 +46,13 @@ function loadDir(dir: string, source: string): Reviewer[] {
         source,
         file,
         body,
+        tools: data.tools
+          ? data.tools
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : [],
+        validate: data.validate !== 'false',
       };
     });
 }

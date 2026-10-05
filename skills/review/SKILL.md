@@ -43,8 +43,12 @@ In ONE message, launch one Task per entry in `reviewers` (they must run in paral
 - `model`: the reviewer's `model`
 - `description`: `Sieve: <name>`
 - `prompt`:
+
   > Read the file `<prompt>` and follow its instructions exactly. Use only read-only tools.
   > Your final message must be ONLY the JSON array described there — no prose, no code fences.
+
+  If the entry has a non-empty `tools`, replace "Use only read-only tools." with
+  "You may use read-only tools plus: <tools joined with ', '>."
 
 If the `prepare` output has `map`, launch the cartographer **in the same message**, in parallel with the reviewers:
 

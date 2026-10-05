@@ -4,13 +4,26 @@
  */
 import { Hono } from 'hono';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type { InboxData, InboxJob, InboxPr, Settings } from '../shared/types.ts';
-import { SIEVE_HOME } from '../cli/lib/settings.ts';
+import { loadSettings, SIEVE_HOME } from '../cli/lib/settings.ts';
+import { loadReviewers } from '../cli/lib/reviewers.ts';
 import { bucketOf, checkoutOf, fetchInbox, inboxSettings, localRuns } from '../cli/lib/inbox.ts';
 import { paths, writeJson } from '../cli/lib/run.ts';
 import { runClaude } from './claude.ts';
 import { ensureUi, openBrowser, staticUi } from './index.ts';
+
+const SIEVE_ROOT = resolve(dirname(import.meta.path), '..');
+
+/** Extra tools that enabled reviewers ask for (`tools:` in their frontmatter) — granted to the headless run. */
+function reviewerTools(checkout?: string): string[] {
+  if (!checkout) return [];
+  try {
+    return [...new Set(loadReviewers(SIEVE_ROOT, checkout, loadSettings(checkout)).flatMap((r) => r.tools))];
+  } catch {
+    return [];
+  }
+}
 
 type GitHubRows = Awaited<ReturnType<typeof fetchInbox>>;
 
@@ -151,6 +164,7 @@ export function createInboxApp(o: InboxServerOptions) {
           'Glob',
           'Task',
           'Agent',
+          ...reviewerTools(checkout),
         ],
         addDirs: [SIEVE_HOME],
         env: { SIEVE_HEADLESS: '1' },

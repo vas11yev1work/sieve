@@ -80,6 +80,11 @@ export function reviewerPrompt(
     ? `- Team notes from previous reviews — findings the team rejected and why. Do not repeat these mistakes: \`${learned}\``
     : '';
 
+  const readOnly = `You may read any file in the worktree and run read-only git commands there (\`git -C ${meta.worktree} log/blame/show\`).`;
+  const permissionsSection = reviewer.tools.length
+    ? `${readOnly} You may also use: ${reviewer.tools.map((t) => `\`${t}\``).join(', ')}. Do not modify tracked files in the worktree. Stop every process you started before returning.`
+    : `${readOnly} Never modify files, never run builds, tests, linters or installs.`;
+
   return render(template(sieveRoot, 'reviewer.md'), {
     ...commonVars(meta, settings, files),
     name: reviewer.name,
@@ -87,6 +92,7 @@ export function reviewerPrompt(
     defaultCategory: reviewer.category,
     rulesSection,
     learnedSection,
+    permissionsSection,
   });
 }
 
