@@ -8,6 +8,8 @@ import ChatPanel from './components/ChatPanel.vue';
 import PublishDialog from './components/PublishDialog.vue';
 import Markdown from './components/Markdown.vue';
 import LanguagePicker from './components/LanguagePicker.vue';
+import PanelTabs from './components/PanelTabs.vue';
+import VerdictList from './components/VerdictList.vue';
 import { mapStore, mapEnabled, prMap, loadMap, moveFlow, selectFlow, showNode } from './map';
 import {
   GitBranch,
@@ -46,6 +48,25 @@ function toggleReviewer(name: string) {
   const h = store.hiddenReviewers;
   store.hiddenReviewers = h.includes(name) ? h.filter((r) => r !== name) : [...h, name];
 }
+
+// Left column: the findings, or what each reviewer concluded about the change.
+const listTab = ref<'findings' | 'verdicts'>('findings');
+const troubled = computed(
+  () => (store.run?.reviews || []).filter((r) => r.verdict === 'failed' || r.verdict === 'incomplete').length,
+);
+const listTabs = computed(() => [
+  { id: 'findings' as const, label: t.value.findingsTab, count: visible.value.length },
+  ...(store.run?.reviews?.length
+    ? [
+        {
+          id: 'verdicts' as const,
+          label: t.value.verdictsTab,
+          count: troubled.value || undefined,
+          warn: !!troubled.value,
+        },
+      ]
+    : []),
+]);
 
 const ready = computed(
   () =>
@@ -234,7 +255,9 @@ onBeforeUnmount(() => {
 
     <main v-if="store.view === 'review'" class="grid">
       <aside class="col list-col">
-        <FindingList />
+        <PanelTabs v-model="listTab" :tabs="listTabs" />
+        <FindingList v-if="listTab === 'findings'" />
+        <VerdictList v-else @show="listTab = 'findings'" />
       </aside>
       <section class="col detail-col">
         <FindingDetail v-if="current" :finding="current" />
@@ -272,7 +295,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
 }
-.bar {
+header.bar {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -477,6 +500,12 @@ onBeforeUnmount(() => {
 .list-col {
   border-right: 1px solid var(--border);
   background: var(--panel);
+  display: flex;
+  flex-direction: column;
+}
+.list-col > :not(:first-child) {
+  flex: 1;
+  min-height: 0;
 }
 .detail-col {
   overflow: hidden;

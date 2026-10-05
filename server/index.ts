@@ -261,6 +261,7 @@ export function createApp(o: ServerOptions) {
       },
       settings: { reportLanguage: s.reportLanguage, commentLanguage: s.commentLanguage, mapMode: s.map.mode },
       findings,
+      reviews: run.reviews,
       state,
       capabilities: {
         publish: meta.mode === 'pr' && has('gh'),

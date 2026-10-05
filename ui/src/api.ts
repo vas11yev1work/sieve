@@ -6,6 +6,7 @@ import type {
   InboxJob,
   MapStatus,
   ParsedHunk,
+  ReviewerVerdict,
   RunState,
   Settings,
 } from '../../shared/types';
@@ -29,6 +30,7 @@ export interface RunData {
   };
   settings: { reportLanguage: string; commentLanguage: string; mapMode: Settings['map']['mode'] };
   findings: Finding[];
+  reviews?: ReviewerVerdict[];
   state: RunState;
   capabilities: { publish: boolean; chat: boolean };
 }

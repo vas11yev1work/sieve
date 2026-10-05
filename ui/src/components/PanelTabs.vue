@@ -1,6 +1,6 @@
 <script setup lang="ts" generic="T extends string">
 /** Tab bar of a side panel: fixed height, tabs on the left, actions (slot) on the right. */
-defineProps<{ tabs: { id: T; label: string; count?: number }[] }>();
+defineProps<{ tabs: { id: T; label: string; count?: number; warn?: boolean }[] }>();
 const active = defineModel<T>({ required: true });
 </script>
 
@@ -15,7 +15,7 @@ const active = defineModel<T>({ required: true });
       :aria-selected="active === tb.id"
       @click="active = tb.id"
     >
-      {{ tb.label }}<span v-if="tb.count" class="n">{{ tb.count }}</span>
+      {{ tb.label }}<span v-if="tb.count" class="n" :class="{ warn: tb.warn }">{{ tb.count }}</span>
     </button>
     <span class="grow" />
     <slot />
@@ -76,6 +76,11 @@ const active = defineModel<T>({ required: true });
 .tab.active .n {
   background: var(--accent-weak);
   color: var(--accent);
+}
+.n.warn,
+.tab.active .n.warn {
+  background: color-mix(in srgb, var(--sev-major) 14%, transparent);
+  color: var(--sev-major);
 }
 .grow {
   flex: 1;

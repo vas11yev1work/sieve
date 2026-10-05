@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, isAbsolute, relative } from 'node:path';
 import { parseArgs } from 'node:util';
-import type { Finding, RawFinding, RunMeta, RunState, Settings, Severity } from '../shared/types.ts';
+import type { Finding, RawFinding, ReviewerVerdict, RunMeta, RunState, Settings, Severity } from '../shared/types.ts';
 import { SEVERITIES } from '../shared/types.ts';
 import { loadSettings, SIEVE_HOME } from './lib/settings.ts';
 import { inboxSettings, rememberCheckout } from './lib/inbox.ts';
@@ -213,7 +213,7 @@ async function prepare(argv: string[]) {
   const p = paths(meta.runDir);
   mkdirSync(meta.runDir, { recursive: true });
   rmSync(p.prompts, { recursive: true, force: true });
-  for (const f of [p.candidates, p.findings, p.state, p.map]) rmSync(f, { force: true });
+  for (const f of [p.candidates, p.findings, p.reviews, p.state, p.map]) rmSync(f, { force: true });
   writeFileSync(p.patch, patch);
   writeJson(p.diff, files);
   writeJson(p.meta, meta);
@@ -290,7 +290,17 @@ async function candidates(argv: string[]) {
   const { meta, files } = loadRun(runDir);
   const settings = loadSettings(meta.repoRoot, meta.overrides);
   const raw = parseJsonLoose(await readStdin());
-  const list: RawFinding[] = Array.isArray(raw) ? raw : ((raw as { findings?: RawFinding[] }).findings ?? []);
+  const input = raw as { findings?: RawFinding[]; reviews?: ReviewerVerdict[] };
+  const list: RawFinding[] = Array.isArray(raw) ? raw : (input.findings ?? []);
+  const VERDICTS = ['clean', 'issues', 'incomplete', 'failed'];
+  const reviews: ReviewerVerdict[] = (Array.isArray(raw) ? [] : (input.reviews ?? []))
+    .filter((r) => r?.name)
+    .map((r) => ({
+      name: r.name,
+      verdict: VERDICTS.includes(r.verdict) ? r.verdict : 'failed',
+      summary: r.summary,
+    }));
+  writeJson(paths(runDir).reviews, reviews);
 
   const dropped: { title?: string; reason: string }[] = [];
   const seen = new Set<string>();

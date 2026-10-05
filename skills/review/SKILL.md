@@ -45,7 +45,7 @@ In ONE message, launch one Task per entry in `reviewers` (they must run in paral
 - `prompt`:
 
   > Read the file `<prompt>` and follow its instructions exactly. Use only read-only tools.
-  > Your final message must be ONLY the JSON array described there — no prose, no code fences.
+  > Your final message must be ONLY the JSON object described there — no prose, no code fences.
 
   If the entry has a non-empty `tools`, replace "Use only read-only tools." with
   "You may use read-only tools plus: <tools joined with ', '>."
@@ -61,18 +61,22 @@ The cartographer does not take part in merging or validation — keep its answer
 
 ## 3. Merge and register candidates
 
-Collect the arrays. If a reviewer returned something unparsable, skip it and remember to mention it.
+Each reviewer returns `{ verdict, summary, findings }`. Record one entry per reviewer in `reviews`:
+`{ "name": "<name>", "verdict": "<verdict>", "summary": "<summary>" }`. If a reviewer failed or returned
+something unparsable, record `{ "name": "<name>", "verdict": "failed", "summary": "<what went wrong, briefly, in reportLanguage>" }`
+and remember to mention it. If it returned a bare array, treat it as its `findings` with verdict
+`issues` (or `clean` when empty).
 
-Merge duplicates: findings about the same underlying problem at the same place (same file, overlapping
+Merge the `findings` of all reviewers. Merge duplicates: findings about the same underlying problem at the same place (same file, overlapping
 lines) become one — keep the clearest title/explanation, the highest severity, and list all reviewer
 names in `reviewers`. Set `reviewers: ["<name>"]` on every other finding. Do not invent, reword or drop
 findings beyond merging.
 
-Pass the merged array to the CLI with a quoted heredoc:
+Pass the merged findings and the reviews to the CLI with a quoted heredoc:
 
 ```bash
 bun "$SIEVE/cli/sieve.ts" candidates "<runDir>" <<'SIEVE_JSON'
-[ ...merged findings... ]
+{ "findings": [ ...merged findings... ], "reviews": [ ...one entry per reviewer... ] }
 SIEVE_JSON
 ```
 
@@ -117,7 +121,7 @@ browser and prints `{ "url": … }`.
 ## 6. Report
 
 Reply in `reportLanguage`, briefly: how many findings by severity, how many were filtered out by
-validation, which reviewers failed (if any), and the UI link. Remind the user that nothing is posted
+validation, which reviewers could not finish (`incomplete` or `failed`, with the reason), and the UI link. Remind the user that nothing is posted
 until they press "Publish" in the UI. Unless `mapMode` is `off`, mention the "Map" tab: it shows how the changed code works as a graph
 of flows (already built if the cartographer ran, otherwise one click on "Build map"). Do not list the findings
 in detail — they are in the UI.

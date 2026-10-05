@@ -51,13 +51,29 @@ Do NOT report:
 - rules that are explicitly silenced in code (e.g. eslint-disable with a reason);
 - intentional behaviour changes that match the PR description.
 
-If you are not sure an issue is real, leave it out. Returning `[]` is a perfectly good result.
+If you are not sure an issue is real, leave it out. A `clean` verdict with no findings is a perfectly good result.
 
 ## Output
 
-Return ONLY a JSON array, no prose before or after, no code fences. Each item:
+Return ONLY a JSON object, no prose before or after, no code fences:
 
 ```
+{
+  "verdict": "clean" | "issues" | "incomplete",
+  "summary": "1-2 sentences: what you checked and what you concluded",
+  "findings": [ ...items as below... ]
+}
+```
+
+- `clean` — you checked everything in your focus and found nothing worth reporting (`findings` is `[]`);
+- `issues` — you found problems, they are in `findings`;
+- `incomplete` — you could not check part of your focus (say what and why in `summary`); report what you did find.
+
+Always return a verdict, even when there is nothing to report.
+
+Each item of `findings`:
+
+````
 {
   "file": "path/relative/to/repo/root.ts",
   "line": 42,                  // line in the NEW version of the file (as in the worktree)
@@ -70,8 +86,8 @@ Return ONLY a JSON array, no prose before or after, no code fences. Each item:
   "suggestion": "how to fix it: one sentence; if the fix is small (up to ~15 lines), add the fixed code in a fenced block with the language, e.g. ```ts",
   "confidence": 0.0-1.0
 }
-```
+````
 
 Severity: critical = breaks prod / security hole; major = real bug or clear rule violation; minor = small but real issue; nit = trivial.
 
-Write `title`, `explanation` and `suggestion` in **{{reportLanguage}}**. Keep code, identifiers and rule quotes as they are.
+Write `summary`, `title`, `explanation` and `suggestion` in **{{reportLanguage}}**. Keep code, identifiers and rule quotes as they are.

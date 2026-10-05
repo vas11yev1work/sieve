@@ -1,6 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import type { Finding, ParsedFile, RawFinding, RuleFile, RunMeta, RunState } from '../../shared/types.ts';
+import type {
+  Finding,
+  ParsedFile,
+  RawFinding,
+  ReviewerVerdict,
+  RuleFile,
+  RunMeta,
+  RunState,
+} from '../../shared/types.ts';
 
 export const paths = (runDir: string) => ({
   meta: join(runDir, 'meta.json'),
@@ -11,6 +19,7 @@ export const paths = (runDir: string) => ({
   raw: join(runDir, 'raw'),
   candidates: join(runDir, 'candidates.json'),
   findings: join(runDir, 'findings.json'),
+  reviews: join(runDir, 'reviews.json'),
   state: join(runDir, 'state.json'),
   prompts: join(runDir, 'prompts'),
   map: join(runDir, 'map.json'),
@@ -73,6 +82,7 @@ export function loadRun(runDir: string) {
     files: readJson<ParsedFile[]>(p.diff),
     rules: readJson<RuleFile[]>(p.rules, []),
     findings: readJson<Finding[]>(p.findings, []),
+    reviews: readJson<ReviewerVerdict[]>(p.reviews, []),
     state: readJson<RunState>(p.state, { findings: {} }),
   };
 }

@@ -5,6 +5,13 @@ export type Severity = 'critical' | 'major' | 'minor' | 'nit';
 export const SEVERITIES: Severity[] = ['critical', 'major', 'minor', 'nit'];
 
 /** A finding as returned by a reviewer agent. */
+/** One reviewer's overall verdict on the change — returned even when it found nothing. */
+export interface ReviewerVerdict {
+  name: string;
+  verdict: 'clean' | 'issues' | 'incomplete' | 'failed';
+  summary?: string;
+}
+
 export interface RawFinding {
   file: string;
   line: number;
