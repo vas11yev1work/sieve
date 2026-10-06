@@ -71,6 +71,16 @@ export function loadReviewers(
   only?: string[],
   skip?: string[],
 ): Reviewer[] {
+  const byName = allReviewers(sieveRoot, repoRoot, settings);
+  const unknown = [...(only || []), ...(skip || [])].filter((n) => !byName.has(n));
+  if (unknown.length)
+    throw new Error(`Unknown reviewer(s): ${unknown.join(', ')}. Available: ${[...byName.keys()].join(', ')}`);
+  const picked = only?.length ? only.map((n) => byName.get(n)!) : [...byName.values()].filter((r) => r.enabled);
+  return picked.filter((r) => !skip?.includes(r.name));
+}
+
+/** Every reviewer by name, disabled ones included, with `settings.reviewers` applied. */
+export function allReviewers(sieveRoot: string, repoRoot: string, settings: Settings): Map<string, Reviewer> {
   const byName = new Map<string, Reviewer>();
   for (const r of [
     ...loadDir(join(sieveRoot, 'skills', 'review', 'reviewers'), 'builtin'),
@@ -85,9 +95,5 @@ export function loadReviewers(
     if (cfg.enabled !== undefined) r.enabled = cfg.enabled;
     if (cfg.model) r.model = cfg.model;
   }
-  const unknown = [...(only || []), ...(skip || [])].filter((n) => !byName.has(n));
-  if (unknown.length)
-    throw new Error(`Unknown reviewer(s): ${unknown.join(', ')}. Available: ${[...byName.keys()].join(', ')}`);
-  const picked = only?.length ? only.map((n) => byName.get(n)!) : [...byName.values()].filter((r) => r.enabled);
-  return picked.filter((r) => !skip?.includes(r.name));
+  return byName;
 }

@@ -6,6 +6,7 @@ import { inboxApi } from '../api';
 import { t, uiLang } from '../i18n';
 import { langCode } from '../store';
 import InboxRow from './InboxRow.vue';
+import ReviewerPicker from './ReviewerPicker.vue';
 import LanguagePicker from '../components/LanguagePicker.vue';
 import { ago } from './ago';
 
@@ -17,6 +18,8 @@ const filter = ref('');
 const opening = ref('');
 const tick = ref(Date.now());
 const stopped = ref(false);
+/** PR whose "Review" was clicked: the reviewer picker is open for it. */
+const picking = ref<InboxPr | null>(null);
 
 const ORDER: InboxBucket[] = ['reviewing', 'review'];
 
@@ -84,7 +87,11 @@ async function call(fn: () => Promise<unknown>) {
   await load();
 }
 
-const review = (p: InboxPr) => call(() => inboxApi.review(p.url));
+function review(only: string[]) {
+  const p = picking.value!;
+  picking.value = null;
+  void call(() => inboxApi.review(p.url, only));
+}
 const cancel = (p: InboxPr) => call(() => inboxApi.cancel(p.url));
 const dismiss = (p: InboxPr) => call(() => inboxApi.dismiss(p.url));
 
@@ -242,7 +249,7 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
               :pr="p"
               :ahead="ahead(p.url)"
               :opening="opening === p.url"
-              @review="review(p)"
+              @review="picking = p"
               @cancel="cancel(p)"
               @dismiss="dismiss(p)"
               @open="(dir) => open(p, dir)"
@@ -251,6 +258,7 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
         </section>
       </template>
     </main>
+    <ReviewerPicker v-if="picking" :pr="picking" @start="review" @close="picking = null" />
   </div>
 </template>
 

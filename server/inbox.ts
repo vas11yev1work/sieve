@@ -7,7 +7,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'nod
 import { dirname, join, resolve } from 'node:path';
 import type { InboxData, InboxJob, InboxPr, Settings } from '../shared/types.ts';
 import { loadSettings, SIEVE_HOME } from '../cli/lib/settings.ts';
-import { loadReviewers } from '../cli/lib/reviewers.ts';
+import { allReviewers, loadReviewers } from '../cli/lib/reviewers.ts';
 import { bucketOf, checkoutOf, fetchInbox, inboxSettings, localRuns } from '../cli/lib/inbox.ts';
 import { paths, writeJson } from '../cli/lib/run.ts';
 import { runClaude } from './claude.ts';
@@ -15,11 +15,11 @@ import { ensureUi, openBrowser, staticUi } from './index.ts';
 
 const SIEVE_ROOT = resolve(dirname(import.meta.path), '..');
 
-/** Extra tools that enabled reviewers ask for (`tools:` in their frontmatter) — granted to the headless run. */
-function reviewerTools(checkout?: string): string[] {
+/** Extra tools that the reviewers to run ask for (`tools:` in their frontmatter) — granted to the headless run. */
+function reviewerTools(checkout?: string, only?: string[]): string[] {
   if (!checkout) return [];
   try {
-    return [...new Set(loadReviewers(SIEVE_ROOT, checkout, loadSettings(checkout)).flatMap((r) => r.tools))];
+    return [...new Set(loadReviewers(SIEVE_ROOT, checkout, loadSettings(checkout), only).flatMap((r) => r.tools))];
   } catch {
     return [];
   }
@@ -107,6 +107,8 @@ export function createInboxApp(o: InboxServerOptions) {
   const jobs = new Map<string, InboxJob>();
   const aborts = new Map<string, AbortController>();
   const force = new Set<string>();
+  /** Reviewers picked on the page for a queued job (`--only`); none = the enabled ones. */
+  const picks = new Map<string, string[]>();
   let gh: { at: number; rows?: GitHubRows; error?: string } | null = null;
   /** Languages picked on the page without "save as default": this page only. */
   let lang: { reportLanguage?: string; commentLanguage?: string } = {};
@@ -149,10 +151,11 @@ export function createInboxApp(o: InboxServerOptions) {
     const cwd = checkout || SIEVE_HOME;
     mkdirSync(join(SIEVE_HOME, 'logs'), { recursive: true });
     job.log = join(SIEVE_HOME, 'logs', `inbox-${pr ? `${pr.owner}-${pr.repo}-${pr.number}` : Date.now()}.jsonl`);
+    const only = picks.get(job.url);
     try {
       const res = await runClaude({
         cwd,
-        prompt: `/sieve:review ${job.url}${force.has(job.url) ? ' --force' : ''}`,
+        prompt: `/sieve:review ${job.url}${force.has(job.url) ? ' --force' : ''}${only ? ` --only ${only.join(',')}` : ''}`,
         tools: 'all',
         allowedTools: [
           'Bash(bun:*)',
@@ -164,7 +167,7 @@ export function createInboxApp(o: InboxServerOptions) {
           'Glob',
           'Task',
           'Agent',
-          ...reviewerTools(checkout),
+          ...reviewerTools(checkout, only),
         ],
         addDirs: [SIEVE_HOME],
         env: { SIEVE_HEADLESS: '1' },
@@ -185,6 +188,7 @@ export function createInboxApp(o: InboxServerOptions) {
       job.finishedAt = new Date().toISOString();
       aborts.delete(job.url);
       force.delete(job.url);
+      picks.delete(job.url);
       void pump();
     }
   }
@@ -195,12 +199,26 @@ export function createInboxApp(o: InboxServerOptions) {
   app.get('/api/inbox/ping', (c) => c.json({ ok: true }));
   app.get('/api/inbox', async (c) => c.json(await data(c.req.query('refresh') === '1')));
 
+  /** Reviewers available for a PR (its checkout's, or the clone's), with the ones enabled by default. */
+  app.get('/api/inbox/reviewers', (c) => {
+    const pr = gh?.rows?.prs.find((p) => p.url === c.req.query('url'));
+    if (!pr) return c.json({ error: 'This PR is not in the inbox. Refresh the page.' }, 404);
+    const root = checkoutOf(settings().inbox, pr.owner, pr.repo) || join(SIEVE_HOME, 'repos', pr.owner, pr.repo);
+    const all = allReviewers(SIEVE_ROOT, root, loadSettings(root));
+    return c.json([...all.values()].map((r) => ({ name: r.name, description: r.description, enabled: r.enabled })));
+  });
+
   app.post('/api/inbox/review', async (c) => {
-    const { url } = await c.req.json<{ url: string }>();
+    const { url, only } = await c.req.json<{ url: string; only?: string[] }>();
     const pr = gh?.rows?.prs.find((p) => p.url === url);
     if (!pr) return c.json({ error: 'This PR is not in the inbox. Refresh the page.' }, 404);
+    // Names go into the prompt: only plain reviewer names.
+    if (only && (!only.length || only.some((n) => !/^[\w.-]+$/.test(n))))
+      return c.json({ error: 'Pick at least one reviewer.' }, 400);
     const cur = jobs.get(url);
     if (cur && (cur.state === 'queued' || cur.state === 'running')) return c.json(cur);
+    if (only) picks.set(url, only);
+    else picks.delete(url);
     // A run on the current head exists → the skill needs --force to review it again.
     if (localRuns(pr, checkoutOf(settings().inbox, pr.owner, pr.repo)).some((r) => r.onHead)) force.add(url);
     const job: InboxJob = { url, state: 'queued', phase: 'queued', agents: [], queuedAt: new Date().toISOString() };

@@ -101,7 +101,11 @@ const post = <T>(url: string, body: unknown) =>
 
 export const inboxApi = {
   load: (refresh = false) => fetch(`/api/inbox${refresh ? '?refresh=1' : ''}`).then((r) => json<InboxData>(r)),
-  review: (url: string) => post<InboxJob>('/api/inbox/review', { url }),
+  reviewers: (url: string) =>
+    fetch(`/api/inbox/reviewers?${new URLSearchParams({ url })}`).then((r) =>
+      json<{ name: string; description: string; enabled: boolean }[]>(r),
+    ),
+  review: (url: string, only?: string[]) => post<InboxJob>('/api/inbox/review', { url, only }),
   cancel: (url: string) => post<InboxJob>('/api/inbox/cancel', { url }),
   dismiss: (url: string) => post<{ ok: boolean }>('/api/inbox/dismiss', { url }),
   open: (runDir: string) => post<{ url: string }>('/api/inbox/open', { runDir }),
