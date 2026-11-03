@@ -108,6 +108,11 @@ const refs = computed(() => findingRefs.value.get(props.finding.id) || []);
       <Markdown class="muted" :text="v.reason" />
     </section>
 
+    <section v-if="v.duplicateOf">
+      <div class="label"><ExternalLink :size="12" /> {{ t.duplicateOf }}</div>
+      <a :href="v.duplicateOf" target="_blank" rel="noopener noreferrer">{{ v.duplicateOf }}</a>
+    </section>
+
     <section>
       <div class="label"><Code :size="12" /> {{ t.code }}</div>
       <DiffView :ctx="ctx" :line="finding.line" :end-line="finding.endLine" />

@@ -29,12 +29,29 @@ export interface RawFinding {
   confidence?: number;
   /** Filled by the orchestrator when it merges duplicates. */
   reviewers?: string[];
+  /** Set by the orchestrator: URL of the PR comment that already raises this problem. */
+  duplicateOf?: string;
 }
 
 export interface Validation {
-  verdict: 'valid' | 'invalid' | 'skipped';
+  /** `duplicate`: the same problem is already raised in a comment on the PR. */
+  verdict: 'valid' | 'invalid' | 'duplicate' | 'skipped';
   confidence?: number;
   reason?: string;
+  /** URL of the PR comment a `duplicate` repeats. */
+  duplicateOf?: string;
+}
+
+/** A comment already on the PR: an inline thread (with `file`), a review body or a conversation comment. */
+export interface PrComment {
+  url: string;
+  author: string;
+  body: string;
+  file?: string;
+  /** New-file line (the original one for an outdated thread). */
+  line?: number;
+  resolved?: boolean;
+  replies?: { author: string; body: string }[];
 }
 
 export interface Finding extends RawFinding {

@@ -33,7 +33,7 @@ It prints JSON. Then:
 - `stop` is set → tell the user the reason (in their language) and stop.
 - `isDraft: true` → mention it in one line and continue.
 
-Remember `runDir`, `reviewers`, `reportLanguage` and `map` (present only when the map is built together with the review).
+Remember `runDir`, `reviewers`, `reportLanguage`, `map` (present only when the map is built together with the review) and `prComments` (present only when the PR already has comments).
 
 ## 2. Run reviewers in parallel
 
@@ -71,6 +71,12 @@ Merge the `findings` of all reviewers. Merge duplicates: findings about the same
 lines) become one — keep the clearest title/explanation, the highest severity, and list all reviewer
 names in `reviewers`. Set `reviewers: ["<name>"]` on every other finding. Do not invent, reword or drop
 findings beyond merging.
+
+If the `prepare` output has `prComments`, read that file: comments already on the PR (inline threads with
+`file`/`line`, review bodies, conversation comments). When a finding raises a problem one of them already raised
+(the same cause, in any words, resolved or not), set `"duplicateOf": "<that comment's url>"` on the finding instead
+of dropping it: Sieve moves it to the filtered tab with a link. A different problem in the same place is not a
+repeat; when in doubt, leave the finding as is.
 
 Pass the merged findings and the reviews to the CLI with a quoted heredoc:
 

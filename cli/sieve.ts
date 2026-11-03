@@ -14,7 +14,16 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, isAbsolute, relative, basename } from 'node:path';
 import { parseArgs } from 'node:util';
-import type { Finding, RawFinding, ReviewerVerdict, RunMeta, RunState, Settings, Severity } from '../shared/types.ts';
+import type {
+  Finding,
+  PrComment,
+  RawFinding,
+  ReviewerVerdict,
+  RunMeta,
+  RunState,
+  Settings,
+  Severity,
+} from '../shared/types.ts';
 import { SEVERITIES } from '../shared/types.ts';
 import { loadSettings, RUNS_HOME, SIEVE_HOME } from './lib/settings.ts';
 import { inboxSettings, rememberCheckout } from './lib/inbox.ts';
@@ -38,6 +47,7 @@ import { loadReviewers } from './lib/reviewers.ts';
 import { reviewerPrompt, validatorPrompt, validatorModel, diffStats, mapPrompt } from './lib/prompts.ts';
 import { normalizeMap, parseMapOutput } from './lib/map.ts';
 import { paths, readJson, writeJson, loadRun, parseJsonLoose, repoRunsDir } from './lib/run.ts';
+import { fetchPrComments } from './lib/threads.ts';
 import { ghPrState, olderRevisions, planPrune, prRunsWithWorktree, removeWorktree, sizeKb } from './lib/prune.ts';
 
 export const SIEVE_ROOT = resolve(dirname(import.meta.path), '..');
@@ -220,6 +230,8 @@ async function prepare(argv: string[]) {
   writeFileSync(p.patch, patch);
   writeJson(p.diff, files);
   writeJson(p.meta, meta);
+  const prComments = meta.mode === 'pr' ? fetchPrComments(meta.owner!, meta.repo!, meta.number!) : [];
+  writeJson(p.prComments, prComments);
 
   const rules = discoverRules(meta.repoRoot, settings.rules, meta.changedFiles);
   writeJson(p.rules, rules);
@@ -267,6 +279,7 @@ async function prepare(argv: string[]) {
     mapMode: settings.map.mode,
     rules: rules.map((r) => r.path),
     reviewers: plan,
+    ...(prComments.length ? { prComments: p.prComments } : {}),
     ...(map ? { map } : {}),
     ...(stop ? { stop } : {}),
   });
@@ -360,11 +373,21 @@ async function candidates(argv: string[]) {
   for (const f of kept)
     if (f.reviewers.length && f.reviewers.every((n) => noValidate.has(n)))
       f.validation = { verdict: 'skipped', reason: 'checked by the reviewer, not validated' };
+
+  // The orchestrator marks findings that repeat a comment already on the PR: filtered, no need to validate them.
+  const known = new Set(readJson<PrComment[]>(paths(runDir).prComments, []).map((c) => c.url));
+  for (const f of kept) {
+    if (f.duplicateOf && known.has(f.duplicateOf)) {
+      f.validation = { verdict: 'duplicate', duplicateOf: f.duplicateOf };
+      f.filtered = true;
+    }
+    delete f.duplicateOf;
+  }
   writeJson(paths(runDir).candidates, kept);
 
   const validate = settings.validation.enabled
     ? kept
-        .filter((f) => !f.validation.reason)
+        .filter((f) => !f.validation.reason && f.validation.verdict !== 'duplicate')
         .map((f) => {
           const file = join(paths(runDir).prompts, `validate-${f.id}.md`);
           writeFileSync(file, validatorPrompt(SIEVE_ROOT, meta, settings, files, f));
@@ -396,6 +419,7 @@ async function finalize(argv: string[]) {
   for (const v of (Array.isArray(raw) ? raw : []) as Verdict[]) if (v && v.id) verdicts.set(v.id, v);
 
   for (const f of cands) {
+    if (f.validation.verdict === 'duplicate') continue;
     const v = verdicts.get(f.id);
     if (!v) {
       f.validation = { verdict: 'skipped', reason: f.validation?.reason };

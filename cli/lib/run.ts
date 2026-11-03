@@ -30,6 +30,7 @@ export const paths = (runDir: string) => ({
   mapPrompt: join(runDir, 'prompts', 'map.md'),
   worktree: join(runDir, 'wt'),
   server: join(runDir, 'server.json'),
+  prComments: join(runDir, 'pr-comments.json'),
 });
 
 export function readJson<T>(path: string, fallback?: T): T {
