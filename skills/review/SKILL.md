@@ -73,10 +73,13 @@ names in `reviewers`. Set `reviewers: ["<name>"]` on every other finding. Do not
 findings beyond merging.
 
 If the `prepare` output has `prComments`, read that file: comments already on the PR (inline threads with
-`file`/`line`, review bodies, conversation comments). When a finding raises a problem one of them already raised
-(the same cause, in any words, resolved or not), set `"duplicateOf": "<that comment's url>"` on the finding instead
-of dropping it: Sieve moves it to the filtered tab with a link. A different problem in the same place is not a
-repeat; when in doubt, leave the finding as is.
+`file`/`line` and their replies, review bodies, conversation comments, tables of findings inside them). Only a
+problem **nobody has discussed on the PR yet** is worth showing. Go through every finding and ask: does any comment
+touch this problem — raise it, ask about it, list it as an open question, explain or decline it, or note that it is
+still not fixed? Resolved or not, in any words, wherever on the PR. If yes, set
+`"duplicateOf": "<that comment's url>"` on the finding instead of dropping it: Sieve moves it to the filtered tab
+with a link. Leave a finding unmarked only when no comment is about the same problem; a different problem in the
+same place counts as undiscussed.
 
 Pass the merged findings and the reviews to the CLI with a quoted heredoc:
 
