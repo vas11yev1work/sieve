@@ -5,6 +5,9 @@ import type { Settings } from '../../shared/types.ts';
 
 export const SIEVE_HOME = process.env.SIEVE_HOME || join(homedir(), '.sieve');
 
+/** Run data and PR worktrees. Kept out of the reviewed repo so its tools (tests, linters, watchers) never scan them. */
+export const RUNS_HOME = join(SIEVE_HOME, 'runs');
+
 export const DEFAULT_SETTINGS: Settings = {
   reportLanguage: 'en',
   commentLanguage: 'en',

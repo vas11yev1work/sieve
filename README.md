@@ -77,9 +77,11 @@ The UI is built automatically on the first run (`bun install && bun run build`, 
 /sieve:review 1234 --force                             # re-review a revision that was already reviewed
 ```
 
-Run it from inside the repository when you can: agents then read files inside your project and Claude Code won't ask for extra read permissions. For a PR of a repo you don't have locally, Sieve clones it to `~/.sieve/repos/<owner>/<repo>` (consider adding `~/.sieve` to `permissions.additionalDirectories` in your Claude Code settings).
+Run it from inside the repository: Sieve takes the PR's commits from your checkout. For a PR of a repo you don't have locally, it clones the repo to `~/.sieve/repos/<owner>/<repo>`.
 
-Run data lives in `<repo>/.sieve/runs/` and is excluded from git automatically (via `.git/info/exclude`). Re-running the same PR revision just reopens the UI.
+Run data and the PR's worktree live in `~/.sieve/runs/<owner>-<repo>/pr<n>-<sha>/`, outside the repo, so the repo's own tools (test runners, linters, dev-server watchers, the editor) never pick up the extra checkout. Agents read the prompts and the code from there: add `~/.sieve` to `permissions.additionalDirectories` in your Claude Code settings, or Claude Code asks before every read. Re-running the same PR revision just reopens the UI.
+
+A new review of a PR removes the worktrees of its earlier revisions (their findings stay and still open; the worktree comes back on open). `/sieve:prune` removes the rest: worktrees of merged or closed PRs, of older revisions, and of repos that no longer exist.
 
 ### UI shortcuts
 

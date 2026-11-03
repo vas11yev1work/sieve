@@ -9,6 +9,10 @@ import type {
   RunMeta,
   RunState,
 } from '../../shared/types.ts';
+import { RUNS_HOME } from './settings.ts';
+
+/** Folder with every run of one GitHub repo: `~/.sieve/runs/<owner>-<repo>`. */
+export const repoRunsDir = (owner: string, repo: string) => join(RUNS_HOME, `${owner}-${repo}`.toLowerCase());
 
 export const paths = (runDir: string) => ({
   meta: join(runDir, 'meta.json'),

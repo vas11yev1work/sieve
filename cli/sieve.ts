@@ -12,11 +12,11 @@
  *   sieve inbox [--json] [--no-open]   PRs waiting for your review (UI, or JSON with --json)
  */
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve, dirname, isAbsolute, relative } from 'node:path';
+import { join, resolve, dirname, isAbsolute, relative, basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { Finding, RawFinding, ReviewerVerdict, RunMeta, RunState, Settings, Severity } from '../shared/types.ts';
 import { SEVERITIES } from '../shared/types.ts';
-import { loadSettings, SIEVE_HOME } from './lib/settings.ts';
+import { loadSettings, RUNS_HOME, SIEVE_HOME } from './lib/settings.ts';
 import { inboxSettings, rememberCheckout } from './lib/inbox.ts';
 import {
   parseInput,
@@ -37,7 +37,8 @@ import { discoverRules, isIgnored } from './lib/rules.ts';
 import { loadReviewers } from './lib/reviewers.ts';
 import { reviewerPrompt, validatorPrompt, validatorModel, diffStats, mapPrompt } from './lib/prompts.ts';
 import { normalizeMap, parseMapOutput } from './lib/map.ts';
-import { paths, readJson, writeJson, loadRun, parseJsonLoose } from './lib/run.ts';
+import { paths, readJson, writeJson, loadRun, parseJsonLoose, repoRunsDir } from './lib/run.ts';
+import { ghPrState, olderRevisions, planPrune, prRunsWithWorktree, removeWorktree, sizeKb } from './lib/prune.ts';
 
 export const SIEVE_ROOT = resolve(dirname(import.meta.path), '..');
 
@@ -127,7 +128,7 @@ async function prepare(argv: string[]) {
     const { root, remote, cloned } = ensureRepo(cwd, slugRepo.owner, slugRepo.repo);
     if (!cloned) rememberCheckout(slugRepo.owner, slugRepo.repo, root);
     const id = `pr${pr.number}-${pr.headRefOid.slice(0, 7)}`;
-    const runDir = join(root, '.sieve', 'runs', `${slugRepo.owner}-${slugRepo.repo}`.toLowerCase(), id);
+    const runDir = join(repoRunsDir(slugRepo.owner, slugRepo.repo), id);
 
     if (existsSync(paths(runDir).findings) && !values.force) {
       const findings = readJson<Finding[]>(paths(runDir).findings);
@@ -146,6 +147,7 @@ async function prepare(argv: string[]) {
     fetchPrRefs(root, remote, pr);
     const wt = paths(runDir).worktree;
     ensureWorktree(root, wt, pr.headRefOid);
+    for (const old of olderRevisions(runDir, pr.number)) removeWorktree({ worktree: old, repoRoot: root });
     patch = prDiff(slugRepo.owner, slugRepo.repo, pr.number, root, pr.baseRefOid, pr.headRefOid);
 
     meta = {
@@ -178,7 +180,8 @@ async function prepare(argv: string[]) {
     const d = localDiff(root, base);
     patch = d.patch;
     const id = `local-${slug(d.branch)}`;
-    const runDir = join(root, '.sieve', 'runs', 'local', id);
+    // Grouped by checkout: the same branch name in two repos must not share a run.
+    const runDir = join(RUNS_HOME, `local-${slug(basename(root))}-${Bun.hash(root).toString(36).slice(0, 6)}`, id);
     if (existsSync(runDir)) {
       stopServer(runDir);
       rmSync(runDir, { recursive: true, force: true });
@@ -456,6 +459,15 @@ async function serve(argv: string[]) {
   const runDir = resolve(positionals[0] || die('usage: sieve serve <runDir>'));
   if (!existsSync(paths(runDir).meta)) die(`Not a sieve run: ${runDir}`);
   if (!existsSync(paths(runDir).findings)) die(`Run is not finalized yet (no findings.json): ${runDir}`);
+  const meta = readJson<RunMeta>(paths(runDir).meta);
+  // A pruned run gets its worktree back on open: the per-finding chat reads code from it.
+  if (meta.mode === 'pr' && !existsSync(meta.worktree) && existsSync(meta.repoRoot)) {
+    try {
+      ensureWorktree(meta.repoRoot, meta.worktree, meta.headSha);
+    } catch (e) {
+      process.stderr.write(`Could not restore the worktree, the chat will not see the code: ${(e as Error).message}\n`);
+    }
+  }
   // Reviews started from the inbox run headless: the inbox opens the UI when the user asks.
   if (process.env.SIEVE_HEADLESS) return out({ runDir, headless: true, hint: 'Started from the Sieve inbox: no UI.' });
 
@@ -580,16 +592,22 @@ async function inbox(argv: string[]) {
   out(r);
 }
 
-function runs() {
-  const root = repoRootOf(process.cwd()) || die('Not inside a git repository.');
-  const base = join(root, '.sieve', 'runs');
-  if (!existsSync(base)) return out([]);
+/** Runs of the current repo (all repos outside one); `--prune [--dry-run]` removes worktrees nobody needs. */
+function runs(argv: string[]) {
+  const { values } = parseArgs({
+    args: argv,
+    options: { prune: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false } },
+  });
+  if (values.prune) return prune(values['dry-run']);
+  const root = repoRootOf(process.cwd());
+  if (!existsSync(RUNS_HOME)) return out([]);
   const list: unknown[] = [];
-  for (const group of readdirSync(base)) {
-    for (const id of readdirSync(join(base, group))) {
-      const dir = join(base, group, id);
+  for (const group of readdirSync(RUNS_HOME)) {
+    for (const id of readdirSync(join(RUNS_HOME, group))) {
+      const dir = join(RUNS_HOME, group, id);
       if (!existsSync(paths(dir).meta)) continue;
       const meta = readJson<RunMeta>(paths(dir).meta);
+      if (root && meta.repoRoot !== root) continue;
       const findings = readJson<Finding[]>(paths(dir).findings, []);
       list.push({
         runDir: dir,
@@ -601,6 +619,28 @@ function runs() {
     }
   }
   out(list);
+}
+
+function prune(dryRun: boolean) {
+  const items = planPrune(prRunsWithWorktree(), ghPrState).map((i) => ({ ...i, sizeKb: sizeKb(i.worktree) }));
+  if (!dryRun) {
+    for (const i of items) {
+      stopServer(i.runDir);
+      removeWorktree(i);
+    }
+  }
+  out({
+    dryRun,
+    removed: dryRun ? 0 : items.length,
+    freedMb: Math.round(items.reduce((s, i) => s + i.sizeKb, 0) / 1024),
+    items: items.map(({ runDir, title, url, reason, sizeKb: kb }) => ({
+      runDir,
+      title,
+      url,
+      reason,
+      sizeMb: Math.round(kb / 1024),
+    })),
+  });
 }
 
 // ───────────────────────────── main ─────────────────────────────
@@ -624,7 +664,7 @@ try {
       await serve(rest);
       break;
     case 'runs':
-      runs();
+      runs(rest);
       break;
     case 'inbox':
       await inbox(rest);
@@ -637,7 +677,7 @@ try {
           '  finalize <runDir>     < verdicts JSON\n' +
           '  map <runDir>          < cartographer JSON\n' +
           '  serve <runDir> [--port n] [--no-open] [--detach] [--idle-exit min]\n' +
-          '  runs\n' +
+          '  runs [--prune [--dry-run]]\n' +
           '  inbox [--json] [--port n] [--no-open]\n',
       );
       process.exit(cmd ? 1 : 0);

@@ -47,7 +47,7 @@ export async function inboxData(
     const bucket = bucketOf({ ...p, job });
     if (!bucket) continue; // nothing needed from you
     const checkout = checkoutOf(s.inbox, p.owner, p.repo);
-    prs.push({ ...p, checkout, runs: localRuns(p, checkout), job, bucket });
+    prs.push({ ...p, checkout, runs: localRuns(p), job, bucket });
   }
   return {
     enabled: s.inbox.enabled,
@@ -220,7 +220,7 @@ export function createInboxApp(o: InboxServerOptions) {
     if (only) picks.set(url, only);
     else picks.delete(url);
     // A run on the current head exists → the skill needs --force to review it again.
-    if (localRuns(pr, checkoutOf(settings().inbox, pr.owner, pr.repo)).some((r) => r.onHead)) force.add(url);
+    if (localRuns(pr).some((r) => r.onHead)) force.add(url);
     const job: InboxJob = { url, state: 'queued', phase: 'queued', agents: [], queuedAt: new Date().toISOString() };
     jobs.set(url, job);
     void pump();
@@ -250,9 +250,7 @@ export function createInboxApp(o: InboxServerOptions) {
     const { runDir } = await c.req.json<{ runDir: string }>();
     const dir = resolve(runDir || '');
     // Only runs the inbox itself lists can be opened.
-    const known = gh?.rows?.prs.some((p) =>
-      localRuns(p, checkoutOf(settings().inbox, p.owner, p.repo)).some((r) => r.runDir === dir),
-    );
+    const known = gh?.rows?.prs.some((p) => localRuns(p).some((r) => r.runDir === dir));
     if (!known) return c.json({ error: 'Unknown run. Refresh the page.' }, 404);
     const proc = Bun.spawn(
       ['bun', join(o.sieveRoot, 'cli', 'sieve.ts'), 'serve', dir, '--detach', '--no-open', '--idle-exit', '120'],

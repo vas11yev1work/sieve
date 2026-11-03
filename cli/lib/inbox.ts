@@ -16,7 +16,7 @@ import type {
   Severity,
 } from '../../shared/types.ts';
 import { SEVERITIES } from '../../shared/types.ts';
-import { paths, readJson, writeJson } from './run.ts';
+import { paths, readJson, repoRunsDir, writeJson } from './run.ts';
 import { loadSettings, SIEVE_HOME } from './settings.ts';
 
 /** Global settings only: the inbox spans repos, a repo's settings must not change it. */
@@ -209,18 +209,15 @@ export function summarizeRun(runDir: string, headSha: string): InboxRun | null {
   };
 }
 
-/** Runs of one PR in every place Sieve may have put them, newest first. */
-export function localRuns(pr: Pick<InboxPr, 'owner' | 'repo' | 'number' | 'headSha'>, checkout?: string): InboxRun[] {
-  const roots = new Set([checkout, join(SIEVE_HOME, 'repos', pr.owner, pr.repo)].filter(Boolean) as string[]);
+/** Runs of one PR, newest first. */
+export function localRuns(pr: Pick<InboxPr, 'owner' | 'repo' | 'number' | 'headSha'>): InboxRun[] {
+  const dir = repoRunsDir(pr.owner, pr.repo);
+  if (!existsSync(dir)) return [];
   const out: InboxRun[] = [];
-  for (const root of roots) {
-    const dir = join(root, '.sieve', 'runs', key(pr.owner, pr.repo).replace('/', '-'));
-    if (!existsSync(dir)) continue;
-    for (const id of readdirSync(dir)) {
-      if (!id.startsWith(`pr${pr.number}-`)) continue;
-      const r = summarizeRun(join(dir, id), pr.headSha);
-      if (r) out.push(r);
-    }
+  for (const id of readdirSync(dir)) {
+    if (!id.startsWith(`pr${pr.number}-`)) continue;
+    const r = summarizeRun(join(dir, id), pr.headSha);
+    if (r) out.push(r);
   }
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
