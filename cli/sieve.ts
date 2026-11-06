@@ -244,6 +244,7 @@ async function prepare(argv: string[]) {
     return {
       name: r.name,
       model: r.model,
+      effort: r.effort,
       description: r.description,
       prompt: file,
       tools: r.tools,

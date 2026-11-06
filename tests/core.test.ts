@@ -1,8 +1,13 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { allReviewers } from '../cli/lib/reviewers.ts';
+import { DEFAULT_SETTINGS } from '../cli/lib/settings.ts';
 import { parseDiff, anchorFor } from '../cli/lib/diff.ts';
 import { parseInput } from '../cli/lib/source.ts';
 import { buildReview } from '../server/publish.ts';
-import type { Finding, RunMeta, RunState } from '../shared/types.ts';
+import type { Finding, RunMeta, RunState, Settings } from '../shared/types.ts';
 
 const PATCH = `diff --git a/src/a.ts b/src/a.ts
 index 111..222 100644
@@ -132,5 +137,20 @@ describe('buildReview', () => {
   test('published items are skipped', () => {
     const s2: RunState = { findings: { ...state.findings, f1: { ...state.findings.f1!, published: { at: 'now' } } } };
     expect(buildReview(meta, findings, s2).ids).toEqual(['f2']);
+  });
+});
+
+describe('reviewer effort', () => {
+  test('frontmatter, settings override, unset by default', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'sieve-effort-'));
+    mkdirSync(join(repo, '.sieve', 'reviewers'), { recursive: true });
+    writeFileSync(join(repo, '.sieve', 'reviewers', 'fx.md'), '---\nname: fx\neffort: low\n---\nbody');
+    const root = join(import.meta.dir, '..');
+    const s = (reviewers: Settings['reviewers']) => ({ ...DEFAULT_SETTINGS, reviewers });
+
+    expect(allReviewers(root, repo, s({})).get('fx')!.effort).toBe('low');
+    expect(allReviewers(root, repo, s({ fx: { effort: 'max' } })).get('fx')!.effort).toBe('max');
+    expect(allReviewers(root, repo, s({})).get('quality')!.effort).toBeUndefined();
+    rmSync(repo, { recursive: true, force: true });
   });
 });

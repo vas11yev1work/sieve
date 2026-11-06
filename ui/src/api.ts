@@ -4,6 +4,7 @@ import type {
   FindingState,
   InboxData,
   InboxJob,
+  InboxReviewer,
   MapStatus,
   ParsedHunk,
   ReviewerVerdict,
@@ -102,9 +103,7 @@ const post = <T>(url: string, body: unknown) =>
 export const inboxApi = {
   load: (refresh = false) => fetch(`/api/inbox${refresh ? '?refresh=1' : ''}`).then((r) => json<InboxData>(r)),
   reviewers: (url: string) =>
-    fetch(`/api/inbox/reviewers?${new URLSearchParams({ url })}`).then((r) =>
-      json<{ name: string; description: string; enabled: boolean }[]>(r),
-    ),
+    fetch(`/api/inbox/reviewers?${new URLSearchParams({ url })}`).then((r) => json<InboxReviewer[]>(r)),
   review: (url: string, only?: string[]) => post<InboxJob>('/api/inbox/review', { url, only }),
   cancel: (url: string) => post<InboxJob>('/api/inbox/cancel', { url }),
   dismiss: (url: string) => post<{ ok: boolean }>('/api/inbox/dismiss', { url }),

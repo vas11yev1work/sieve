@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { LoaderCircle, Play, X } from 'lucide-vue-next';
-import type { InboxPr } from '../../../shared/types';
+import type { InboxPr, InboxReviewer } from '../../../shared/types';
 import { inboxApi } from '../api';
 import { t } from '../i18n';
 
 const props = defineProps<{ pr: InboxPr }>();
 const emit = defineEmits<{ start: [only: string[]]; close: [] }>();
 
-const list = ref<{ name: string; description: string; enabled: boolean }[] | null>(null);
+const list = ref<InboxReviewer[] | null>(null);
 const picked = ref<string[]>([]);
 const error = ref('');
 const i = computed(() => t.value.inbox);
@@ -42,6 +42,7 @@ onMounted(async () => {
             <input v-model="picked" type="checkbox" :value="r.name" />
             <span>
               <span class="name mono">{{ r.name }}</span>
+              <span class="muted model mono">{{ r.effort ? `${r.model} · ${r.effort}` : r.model }}</span>
               <span v-if="!r.enabled" class="muted off">{{ i.pickOff }}</span>
               <span v-if="r.description" class="muted desc">{{ r.description }}</span>
             </span>
@@ -143,6 +144,7 @@ button.link:hover {
   font-weight: 600;
   font-size: 13px;
 }
+.model,
 .off {
   font-size: 12px;
   margin-left: 8px;

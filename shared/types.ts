@@ -129,9 +129,22 @@ export interface RunState {
   reviews?: { at: string; url?: string; count: number }[];
 }
 
+/** Reasoning effort of a reviewer's subagent; unset = Claude Code's default. */
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export interface ReviewerSettings {
   enabled?: boolean;
   model?: 'haiku' | 'sonnet' | 'opus' | string;
+  effort?: Effort;
+}
+
+/** A reviewer as the inbox's "reviewers to run" dialog shows it. */
+export interface InboxReviewer {
+  name: string;
+  description: string;
+  enabled: boolean;
+  model: string;
+  effort?: string;
 }
 
 export interface Settings {

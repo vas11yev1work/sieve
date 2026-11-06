@@ -42,13 +42,17 @@
     },
     "reviewers": {
       "type": "object",
-      "description": "Enable/disable reviewers or change their model, by name.",
+      "description": "Enable/disable reviewers or change their model and effort, by name.",
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "enabled": { "type": "boolean" },
-          "model": { "type": "string", "description": "haiku | sonnet | opus" }
+          "model": { "type": "string", "description": "haiku | sonnet | opus" },
+          "effort": {
+            "enum": ["low", "medium", "high", "xhigh", "max"],
+            "description": "Reasoning effort of the reviewer's subagent. Unset = Claude Code's default."
+          }
         }
       }
     },

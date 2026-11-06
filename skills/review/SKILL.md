@@ -41,6 +41,7 @@ In ONE message, launch one Task per entry in `reviewers` (they must run in paral
 
 - `subagent_type`: `general-purpose`
 - `model`: the reviewer's `model`
+- `effort`: the reviewer's `effort` — only when the entry has one; otherwise leave `effort` out
 - `description`: `Sieve: <name>`
 - `prompt`:
 

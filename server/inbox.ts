@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import type { InboxData, InboxJob, InboxPr, Settings } from '../shared/types.ts';
+import type { InboxData, InboxJob, InboxPr, InboxReviewer, Settings } from '../shared/types.ts';
 import { loadSettings, SIEVE_HOME } from '../cli/lib/settings.ts';
 import { allReviewers, loadReviewers } from '../cli/lib/reviewers.ts';
 import { bucketOf, checkoutOf, fetchInbox, inboxSettings, localRuns } from '../cli/lib/inbox.ts';
@@ -205,7 +205,15 @@ export function createInboxApp(o: InboxServerOptions) {
     if (!pr) return c.json({ error: 'This PR is not in the inbox. Refresh the page.' }, 404);
     const root = checkoutOf(settings().inbox, pr.owner, pr.repo) || join(SIEVE_HOME, 'repos', pr.owner, pr.repo);
     const all = allReviewers(SIEVE_ROOT, root, loadSettings(root));
-    return c.json([...all.values()].map((r) => ({ name: r.name, description: r.description, enabled: r.enabled })));
+    return c.json(
+      [...all.values()].map((r): InboxReviewer => ({
+        name: r.name,
+        description: r.description,
+        enabled: r.enabled,
+        model: r.model,
+        effort: r.effort,
+      })),
+    );
   });
 
   app.post('/api/inbox/review', async (c) => {

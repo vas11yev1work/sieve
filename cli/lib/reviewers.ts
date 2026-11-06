@@ -7,6 +7,8 @@ export interface Reviewer {
   name: string;
   description: string;
   model: string;
+  /** `effort:` in frontmatter or settings; unset = the subagent's default effort. */
+  effort?: string;
   category: string;
   enabled: boolean;
   /** "builtin" | "global" | "project" */
@@ -41,6 +43,7 @@ function loadDir(dir: string, source: string): Reviewer[] {
         name: data.name || basename(f, '.md'),
         description: data.description || '',
         model: data.model || 'sonnet',
+        effort: data.effort || undefined,
         category: data.category || 'bug',
         enabled: data.enabled !== 'false',
         source,
@@ -60,7 +63,7 @@ function loadDir(dir: string, source: string): Reviewer[] {
 /**
  * Reviewers come from three places; a later one with the same name replaces an earlier one:
  *   <sieve>/skills/review/reviewers  <  ~/.sieve/reviewers  <  <repo>/.sieve/reviewers
- * Then `settings.reviewers[name]` can disable a reviewer or change its model.
+ * Then `settings.reviewers[name]` can disable a reviewer or change its model and effort.
  * `only` (from `--only`) runs exactly the named reviewers, including ones disabled in settings.
  * `skip` (from `--skip`) removes the named reviewers from whatever would run.
  */
@@ -94,6 +97,7 @@ export function allReviewers(sieveRoot: string, repoRoot: string, settings: Sett
     if (!r) continue;
     if (cfg.enabled !== undefined) r.enabled = cfg.enabled;
     if (cfg.model) r.model = cfg.model;
+    if (cfg.effort) r.effort = cfg.effort;
   }
   return byName;
 }

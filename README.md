@@ -191,6 +191,7 @@ Languages can also be switched in the UI (languages button in the header); "save
   "reviewers": {
     "history": { "enabled": true }, // turn on an optional reviewer
     "bugs-diff": { "model": "sonnet" }, // cheaper model for a reviewer
+    "bugs-logic": { "effort": "high" }, // low | medium | high | xhigh | max; unset = Claude Code's default
   },
 
   "minSeverity": "minor", // critical | major | minor | nit
@@ -219,6 +220,7 @@ A reviewer is a markdown file with frontmatter. Add your own (or override a buil
 name: vue
 description: Vue 3 + TypeScript specifics
 model: sonnet # haiku | sonnet | opus
+effort: high # optional: low | medium | high | xhigh | max; unset = Claude Code's default
 category: bug # default category of its findings
 enabled: true
 ---
