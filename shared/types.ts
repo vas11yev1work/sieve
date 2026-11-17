@@ -9,6 +9,8 @@ export interface ReviewerVerdict {
   name: string;
   verdict: 'clean' | 'issues' | 'incomplete' | 'failed';
   summary?: string;
+  /** Changed files in the reviewer's scope it did not read (from its `checkedFiles`). */
+  unchecked?: string[];
 }
 
 /** A finding as returned by a reviewer agent. */
@@ -136,6 +138,8 @@ export interface ReviewerSettings {
   enabled?: boolean;
   model?: 'haiku' | 'sonnet' | 'opus' | string;
   effort?: Effort;
+  /** false = always review the whole change, even when it is split into parts. */
+  shard?: boolean;
 }
 
 /** A reviewer as the inbox's "reviewers to run" dialog shows it. */
@@ -167,6 +171,8 @@ export interface Settings {
   map: { mode: 'on-demand' | 'always' | 'off'; model: string };
   /** Glob patterns of files to exclude from review (lockfiles, generated code…). */
   ignore: string[];
+  /** Large PRs: split the changed files into parts, one agent per reviewer and part. */
+  sharding: { enabled: boolean; maxFiles: number; maxLines: number; maxShards: number };
   /** PRs waiting for your review, across repos. Read from ~/.sieve/settings.json only. */
   inbox: InboxSettings;
 }

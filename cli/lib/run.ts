@@ -31,6 +31,9 @@ export const paths = (runDir: string) => ({
   worktree: join(runDir, 'wt'),
   server: join(runDir, 'server.json'),
   prComments: join(runDir, 'pr-comments.json'),
+  /** Files of each part of a large change (`[]` = reviewed whole). */
+  shards: join(runDir, 'shards.json'),
+  shardPatch: (n: number) => join(runDir, `diff-${n}.patch`),
 });
 
 export function readJson<T>(path: string, fallback?: T): T {

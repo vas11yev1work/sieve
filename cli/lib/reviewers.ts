@@ -19,6 +19,8 @@ export interface Reviewer {
   tools: string[];
   /** false → its findings skip the validator (it checked them with tools the validator lacks). */
   validate: boolean;
+  /** false (`shard: false`) → reviews the whole change even when it is split into parts (whole-PR checks). */
+  shard: boolean;
 }
 
 export function parseFrontmatter(text: string): { data: Record<string, string>; body: string } {
@@ -56,6 +58,7 @@ function loadDir(dir: string, source: string): Reviewer[] {
               .filter(Boolean)
           : [],
         validate: data.validate !== 'false',
+        shard: data.shard !== 'false',
       };
     });
 }
@@ -98,6 +101,7 @@ export function allReviewers(sieveRoot: string, repoRoot: string, settings: Sett
     if (cfg.enabled !== undefined) r.enabled = cfg.enabled;
     if (cfg.model) r.model = cfg.model;
     if (cfg.effort) r.effort = cfg.effort;
+    if (cfg.shard !== undefined) r.shard = cfg.shard;
   }
   return byName;
 }

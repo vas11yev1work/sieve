@@ -24,16 +24,16 @@ prepare ──► reviewers (parallel) ──► merge ──► validators (par
   CLI        Claude Code subagents   orchestr.   Claude Code subagents      CLI      Bun+Vue   gh api
 ```
 
-| Step       | Who               | What                                                                                                                                                                                                         |
-| ---------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| prepare    | `cli/sieve.ts`    | Resolves the input, fetches the PR into a detached git worktree at the PR head, takes the diff exactly as GitHub shows it, drops ignored files, finds applicable rule files, renders a prompt per reviewer.  |
-| review     | subagents         | Each enabled reviewer gets its own prompt and returns findings as JSON. Default: `rules` (sonnet), `bugs-diff` (opus), `bugs-logic` (opus), `quality` (sonnet); `history` (git blame/log) is off by default. |
-| merge      | orchestrator      | Merges duplicates found by several reviewers.                                                                                                                                                                |
-| candidates | CLI               | Normalizes paths, drops findings outside changed files or below `minSeverity`, computes where an inline comment can be anchored.                                                                             |
-| validate   | subagents         | One skeptical validator per finding (opus for bugs/security, sonnet for rules by default). Rejected / low-confidence findings go to the _Filtered out_ tab.                                                  |
-| UI         | `server/` + `ui/` | Local server on `127.0.0.1`. Per-finding chat runs `claude -p` with `--resume`, read-only tools (`Read`, `Grep`, `Glob`), cwd = the PR worktree.                                                             |
-| map        | subagent / server | Optional. A cartographer agent traces the flows the PR touches through the real code; the map is normalized against the diff and opens in the **Map** tab. See [PR map](#pr-map).                            |
-| publish    | `gh api`          | `POST /repos/{o}/{r}/pulls/{n}/reviews` with `commit_id` = PR head. Findings outside the diff go into the review body with permalinks.                                                                       |
+| Step       | Who               | What                                                                                                                                                                                                                                                                                                    |
+| ---------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prepare    | `cli/sieve.ts`    | Resolves the input, fetches the PR into a detached git worktree at the PR head, takes the diff exactly as GitHub shows it, drops ignored files, finds applicable rule files, renders a prompt per reviewer.                                                                                             |
+| review     | subagents         | Each enabled reviewer gets its own prompt and returns findings as JSON. A large PR is split into parts, one agent per reviewer and part ([Large PRs](#large-prs)). Default: `rules` (sonnet), `bugs-diff` (opus), `bugs-logic` (opus), `quality` (sonnet); `history` (git blame/log) is off by default. |
+| merge      | orchestrator      | Merges duplicates found by several reviewers.                                                                                                                                                                                                                                                           |
+| candidates | CLI               | Normalizes paths, drops findings outside changed files or below `minSeverity`, computes where an inline comment can be anchored.                                                                                                                                                                        |
+| validate   | subagents         | One skeptical validator per finding (opus for bugs/security, sonnet for rules by default). Rejected / low-confidence findings go to the _Filtered out_ tab.                                                                                                                                             |
+| UI         | `server/` + `ui/` | Local server on `127.0.0.1`. Per-finding chat runs `claude -p` with `--resume`, read-only tools (`Read`, `Grep`, `Glob`), cwd = the PR worktree.                                                                                                                                                        |
+| map        | subagent / server | Optional. A cartographer agent traces the flows the PR touches through the real code; the map is normalized against the diff and opens in the **Map** tab. See [PR map](#pr-map).                                                                                                                       |
+| publish    | `gh api`          | `POST /repos/{o}/{r}/pulls/{n}/reviews` with `commit_id` = PR head. Findings outside the diff go into the review body with permalinks.                                                                                                                                                                  |
 
 The pipeline is the same idea as Anthropic's official `code-review` plugin (independent parallel reviewers + per-issue validation), with your rules, your language and a human in the loop before anything is posted.
 
@@ -198,6 +198,7 @@ Languages can also be switched in the UI (languages button in the header); "save
   "validation": { "enabled": true, "model": "auto", "minConfidence": 0.6 },
   "chat": { "model": "sonnet", "tools": ["Read", "Grep", "Glob"] },
   "map": { "mode": "on-demand", "model": "sonnet" }, // on-demand | always | off
+  "sharding": { "enabled": true, "maxFiles": 40, "maxLines": 3000, "maxShards": 4 }, // see Large PRs
   "server": { "port": 0, "open": true },
 }
 ```
@@ -223,6 +224,7 @@ model: sonnet # haiku | sonnet | opus
 effort: high # optional: low | medium | high | xhigh | max; unset = Claude Code's default
 category: bug # default category of its findings
 enabled: true
+shard: true # false = review the whole change even when a large PR is split into parts
 ---
 
 Review only Vue-specific problems in the changed files: lost reactivity, …
@@ -241,6 +243,28 @@ validate: false
 ```
 
 The inbox grants these tools to its headless runs. For an interactive `/sieve:review`, add them to `.claude/settings.local.json` to avoid a prompt on every call. Everything else (installing deps, which port to use, stopping the dev server) belongs in the reviewer's own text.
+
+### Large PRs
+
+One agent cannot read a diff of a few hundred files: it samples, and its `clean` stops meaning anything. So Sieve
+splits a large change into parts and runs each reviewer once per part:
+
+- **How many parts.** Enough to keep each under `sharding.maxFiles` changed files and `sharding.maxLines` changed
+  lines, at most `sharding.maxShards`. A change under both limits is reviewed whole.
+- **Which files go together.** Files linked by imports (relative and `@/`, `~/`, `#` aliases) share a part, so a
+  composable, its callers and its test are read by one agent. A file imported by five or more changed files (shared
+  types, barrels) does not glue parts together. Parts follow path order, so a folder stays in one part unless it alone
+  is bigger than a part.
+- **What an agent sees.** Its own files and their diff, plus the list of the other parts' files. It can open any file
+  in the worktree and the full diff, and must search the whole worktree before claiming something is missing or
+  unused. Findings still go through the validator, which reads the whole worktree.
+- **Whole-PR reviewers.** A reviewer whose job is the change as a whole (ticket coverage, every call site updated)
+  sets `shard: false` in its frontmatter, or `reviewers.<name>.shard: false` in settings, and keeps one agent.
+- **Verdicts.** The parts of a reviewer merge into one verdict, the worst of them: failed > incomplete > issues >
+  clean. Summaries are joined with `[part/count]` prefixes.
+
+Every reviewer also returns `checkedFiles`: the changed files it read or ruled out of its focus. A `clean` that leaves
+files of its scope out becomes `incomplete`, and the _Verdicts_ tab lists the files nobody checked.
 
 ### Learning from rejections
 
