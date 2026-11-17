@@ -7,10 +7,11 @@ import { join, resolve } from 'node:path';
 import type {
   Finding,
   FindingStatus,
-  InboxBucket,
   InboxPr,
   InboxRun,
   InboxSettings,
+  InboxTurn,
+  InboxWhy,
   RunMeta,
   RunState,
   Severity,
@@ -62,6 +63,7 @@ export function scopeQuery(s: InboxSettings): string {
     .join(' ');
 }
 
+const REVIEWER = '__typename ... on User { login } ... on Team { slug organization { login } }';
 const PR_FIELDS = `
   ... on PullRequest {
     number title url isDraft createdAt updatedAt additions deletions changedFiles
@@ -69,7 +71,8 @@ const PR_FIELDS = `
     author { login }
     repository { name owner { login } }
     labels(first: 8) { nodes { name color } }
-    reviewRequests(first: 30) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug organization { login } } } } }
+    reviewRequests(first: 30) { nodes { requestedReviewer { ${REVIEWER} } } }
+    timelineItems(last: 20, itemTypes: [REVIEW_REQUESTED_EVENT]) { nodes { ... on ReviewRequestedEvent { createdAt requestedReviewer { ${REVIEWER} } } } }
     reviews(last: 50) { nodes { author { login } state submittedAt commit { oid } } }
     reviewThreads(first: 100) { nodes { isResolved } }
     comments { totalCount }
@@ -90,9 +93,9 @@ export function inboxQuery(s: InboxSettings): { query: string; requested: string
 }
 
 /** Turn the GraphQL answer into inbox rows (without local state yet). */
-export function parsePrs(data: any, viewer: string): Omit<InboxPr, 'runs' | 'bucket' | 'checkout'>[] {
+export function parsePrs(data: any, viewer: string): Omit<InboxPr, 'runs' | 'turn' | 'why' | 'checkout'>[] {
   const me = viewer.toLowerCase();
-  const out = new Map<string, Omit<InboxPr, 'runs' | 'bucket' | 'checkout'>>();
+  const out = new Map<string, Omit<InboxPr, 'runs' | 'turn' | 'why' | 'checkout'>>();
   const rows = [
     ...(data.requested?.nodes || []).map((n: any) => [n, true] as const),
     ...(data.reviewed?.nodes || []).map((n: any) => [n, false] as const),
@@ -102,6 +105,16 @@ export function parsePrs(data: any, viewer: string): Omit<InboxPr, 'runs' | 'buc
     const reqs = (n.reviewRequests?.nodes || []).map((r: any) => r.requestedReviewer).filter(Boolean);
     const direct = reqs.some((r: any) => r.__typename === 'User' && r.login?.toLowerCase() === me);
     const teams = reqs.filter((r: any) => r.__typename === 'Team').map((r: any) => `${r.organization.login}/${r.slug}`);
+    const isOurs = (r: any) =>
+      r?.__typename === 'User'
+        ? r.login?.toLowerCase() === me
+        : r?.__typename === 'Team' && teams.includes(`${r.organization?.login}/${r.slug}`);
+    // The newest request still standing (you or one of your requested teams): how long it waits for you.
+    const requestedAt: string | undefined = (n.timelineItems?.nodes || [])
+      .filter((e: any) => e?.createdAt && isOurs(e.requestedReviewer))
+      .map((e: any) => e.createdAt as string)
+      .sort()
+      .at(-1);
 
     // Latest opinion per reviewer (a later COMMENTED does not cancel an approval).
     const latest = new Map<string, { state: string; at: string; sha?: string }>();
@@ -134,6 +147,7 @@ export function parsePrs(data: any, viewer: string): Omit<InboxPr, 'runs' | 'buc
       changedFiles: n.changedFiles,
       labels: (n.labels?.nodes || []).map((l: any) => ({ name: l.name, color: l.color })),
       requested: !requested ? null : direct ? 'me' : 'team',
+      ...(requested && requestedAt ? { requestedAt } : {}),
       teams,
       decision: n.reviewDecision || null,
       // An approval given before newer commits does not count: those commits were not approved.
@@ -222,18 +236,80 @@ export function localRuns(pr: Pick<InboxPr, 'owner' | 'repo' | 'number' | 'headS
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/** Findings of the run on the current head still wait for you: to go through, or to publish. */
+export function pendingRun(runs: InboxRun[]): InboxRun | undefined {
+  return runs.find((r) => r.onHead && !r.reviews.length && (r.status.open > 0 || r.unpublished > 0));
+}
+
 /**
- * Which group of the inbox a PR belongs to; null = nothing is needed from you, so it is not shown.
- * Needed: you are requested and have not reviewed the current head, or new commits came after your
- * review / approval, or your review was dismissed. Reviewed (approved, commented, published from Sieve)
- * on the current head = hidden,
- * unless you were personally requested again (GitHub drops your request when you review).
+ * Whose turn it is, and why; null = not shown. The first rule that matches wins:
+ * - Sieve: a review is queued or running.
+ * - you: findings of a run on the current head wait for you; or a review is requested from you or your team
+ *   right now (the first request, or the author asked again with "Re-request review").
+ * - the author: your last review asks for changes or comments, or it was dismissed, and nobody asked you again —
+ *   new commits alone do not make it your turn.
+ * - done: you approved and nobody asked you again; or only your team is asked and the PR is approved already.
  */
-export function bucketOf(pr: Pick<InboxPr, 'requested' | 'myReview' | 'job'>): InboxBucket | null {
-  if (pr.job && (pr.job.state === 'queued' || pr.job.state === 'running')) return 'reviewing';
-  // A dismissed review no longer counts.
-  const done = !!pr.myReview?.onHead && pr.myReview.state !== 'DISMISSED';
-  if (done && pr.requested !== 'me') return null;
-  if (pr.requested) return 'review';
-  return pr.myReview && !done ? 'review' : null;
+export function turnOf(
+  pr: Pick<InboxPr, 'requested' | 'myReview' | 'job' | 'runs' | 'decision' | 'approvals' | 'mergeable'>,
+): { turn: InboxTurn; why: InboxWhy } | null {
+  if (pr.job && (pr.job.state === 'queued' || pr.job.state === 'running')) return { turn: 'sieve', why: 'job' };
+  // Conflicts first: the author's fix brings new commits, whatever else waits on this one.
+  if (pr.mergeable === 'CONFLICTING' && (pr.requested || pr.myReview)) return { turn: 'author', why: 'conflicts' };
+  if (pendingRun(pr.runs)) return { turn: 'me', why: 'findings' };
+  // Still asked of you, but someone else approved: a group of its own, below your turn.
+  const asked = pr.decision === 'APPROVED' || pr.approvals > 0 ? 'others' : 'me';
+  if (pr.requested === 'me') return { turn: asked, why: pr.myReview ? 'rerequested' : 'requested' };
+  // ponytail: a team request standing after your own review is taken as the old one (GitHub keeps it when a
+  // member reviews); a team re-request looks the same. Track ReviewRequestedEvent times if that matters.
+  if (pr.requested === 'team' && !pr.myReview) {
+    return pr.decision === 'APPROVED' ? { turn: 'done', why: 'enough' } : { turn: asked, why: 'team' };
+  }
+  switch (pr.myReview?.state) {
+    case 'APPROVED':
+      return { turn: 'done', why: 'approved' };
+    case 'CHANGES_REQUESTED':
+      return { turn: 'author', why: 'changes' };
+    case 'COMMENTED':
+      return { turn: 'author', why: 'commented' };
+    case 'DISMISSED':
+      return { turn: 'author', why: 'dismissed' };
+  }
+  return null;
+}
+
+// ───────────── Snoozed ─────────────
+
+const STATE = () => join(SIEVE_HOME, 'inbox-state.json');
+
+/** PRs snoozed until the head moves: url → head sha at snooze time. */
+export interface InboxState {
+  snoozed: Record<string, string>;
+}
+
+export function loadInboxState(): InboxState {
+  const s = readJson<Partial<InboxState>>(STATE(), {});
+  return { snoozed: s.snoozed || {} };
+}
+
+export function saveInboxState(s: InboxState) {
+  writeJson(STATE(), s);
+}
+
+/**
+ * Split PRs into shown / snoozed. A snooze ends by itself when new commits arrive;
+ * `expired` lists those, so the caller can drop them from the file.
+ */
+export function applyInboxState<T extends Pick<InboxPr, 'url' | 'headSha'>>(prs: T[], s: InboxState) {
+  const shown: T[] = [];
+  const snoozed: string[] = [];
+  const expired: string[] = [];
+  for (const p of prs) {
+    if (s.snoozed[p.url] === p.headSha) snoozed.push(p.url);
+    else {
+      if (s.snoozed[p.url]) expired.push(p.url);
+      shown.push(p);
+    }
+  }
+  return { shown, snoozed, expired };
 }

@@ -11,25 +11,36 @@ import {
   GitMerge,
   MessagesSquare,
   Users,
-  GitBranch,
-  ArrowLeft,
   LoaderCircle,
+  Info,
+  ChevronDown,
+  Clock,
 } from 'lucide-vue-next';
-import type { InboxPr } from '../../../shared/types';
+import type { InboxPr, InboxRun } from '../../../shared/types';
+import { SEVERITIES } from '../../../shared/types';
 import { t } from '../i18n';
 import Markdown from '../components/Markdown.vue';
 import SieveStatus from './SieveStatus.vue';
-import { ago } from './ago';
+import { ago, since, waitFrom, when } from './ago';
+import { runColor } from './track';
 
-const props = defineProps<{ pr: InboxPr; ahead: number; opening: boolean }>();
-const emit = defineEmits<{ review: []; cancel: []; dismiss: []; open: [runDir: string] }>();
+const props = defineProps<{ pr: InboxPr; ahead: number; opening: boolean; expanded: boolean }>();
+const emit = defineEmits<{
+  review: [];
+  cancel: [];
+  dismiss: [];
+  open: [runDir: string];
+  toggle: [];
+  snooze: [];
+}>();
 
 const i = computed(() => t.value.inbox);
 const cur = computed(() => props.pr.runs.find((r) => r.onHead));
-const last = computed(() => props.pr.runs[0]);
 const job = computed(() => props.pr.job);
 const active = computed(() => job.value?.state === 'queued' || job.value?.state === 'running');
 const failed = computed(() => job.value?.state === 'error');
+const teams = computed(() => props.pr.teams.join(', '));
+const my = computed(() => (props.pr.myReview ? i.value.my[props.pr.myReview.state] : undefined));
 
 const decision = computed(() => {
   const p = props.pr;
@@ -47,24 +58,13 @@ const ci = computed(() => {
   return { cls: 'warn', icon: ShieldEllipsis, text: i.value.ci[s] };
 });
 
-/** Findings of the run on the current head still wait for you (to triage or to publish). */
-const pending = computed(
-  () => !!cur.value && !cur.value.reviews.length && (cur.value.status.open > 0 || cur.value.unpublished > 0),
-);
-
-/** One primary action per row; `secondary` opens an older run or re-runs a reviewed one. */
+/** One primary action per row; reviewing again and older runs live under "Details". */
 const action = computed(() => {
   if (active.value) return { kind: 'cancel', label: t.value.cancel, cls: '' };
   if (failed.value) return { kind: 'review', label: i.value.retry, cls: 'primary' };
-  if (pending.value) return { kind: 'open', label: i.value.open, cls: 'primary' };
+  if (props.pr.why === 'findings') return { kind: 'open', label: i.value.open, cls: 'primary' };
   if (cur.value) return { kind: 'open', label: i.value.open, cls: '' };
   return { kind: 'review', label: i.value.review, cls: 'go' };
-});
-const secondary = computed(() => {
-  if (active.value || failed.value) return null;
-  if (cur.value) return { kind: 'review', label: i.value.reviewAgain };
-  if (last.value) return { kind: 'open-last', label: i.value.olderRun };
-  return null;
 });
 
 const where = computed(() => (props.pr.checkout ? i.value.runsFrom(props.pr.checkout) : i.value.runsFromClone));
@@ -73,16 +73,37 @@ function act(kind: string) {
   if (kind === 'review') emit('review');
   else if (kind === 'cancel') emit('cancel');
   else if (kind === 'open' && cur.value) emit('open', cur.value.runDir);
-  else if (kind === 'open-last' && last.value) emit('open', last.value.runDir);
+}
+
+const size = computed(() => {
+  const n = props.pr.additions + props.pr.deletions;
+  return n < 100 ? 'S' : n < 600 ? 'M' : n < 2000 ? 'L' : 'XL';
+});
+
+const why = computed(() => i.value.why[props.pr.why]?.(teams.value, !!props.pr.myReview?.onHead) ?? '');
+
+/** "waits for you 2d": highlighted once your turn has lasted a day. */
+const wait = computed(() => {
+  const from = waitFrom(props.pr);
+  if (!from) return null;
+  const d = since(from);
+  if (props.pr.turn === 'author') return { text: i.value.waitAuthor(d), late: false };
+  return { text: i.value.waitYou(d), late: props.pr.turn === 'me' && Date.now() - Date.parse(from) >= 86_400_000 };
+});
+
+function summary(r: InboxRun) {
+  const n = r.status.open + r.status.accepted + r.status.rejected;
+  if (!n) return i.value.noFindings;
+  const sent = r.reviews.reduce((k, x) => k + x.count, 0);
+  return `${r.status.open ? i.value.triaged(n - r.status.open, n) : i.value.allTriaged}, ${i.value.inPr(sent)}`;
 }
 </script>
 
 <template>
-  <article class="row" :class="[`b-${pr.bucket}`, { active }]">
+  <article class="row" :class="{ active, expanded }">
     <div class="pr">
       <div class="where">
-        <span class="repo">{{ pr.owner }}/{{ pr.repo }}</span>
-        <span class="num">#{{ pr.number }}</span>
+        <span class="mono">{{ pr.owner }}/{{ pr.repo }} #{{ pr.number }}</span>
         <span v-if="pr.isDraft" class="chip">{{ t.draft }}</span>
         <span v-for="l in pr.labels" :key="l.name" class="label">
           <i :style="{ background: `#${l.color}` }" />{{ l.name }}
@@ -91,34 +112,34 @@ function act(kind: string) {
       <a class="title" :href="pr.url" target="_blank" rel="noopener"><Markdown inline :text="pr.title" /></a>
       <div class="meta">
         <span>@{{ pr.author }}</span>
-        <span class="branch mono" :title="`${pr.headRef} → ${pr.baseRef}`">
-          <GitBranch :size="12" />{{ pr.baseRef }} <ArrowLeft :size="11" /> {{ pr.headRef }}
+        <span class="size" :title="`${pr.baseRef} ← ${pr.headRef}, ${i.files(pr.changedFiles)}`">
+          <b :class="`s-${size}`">{{ size }}</b>
+          <span class="add mono">+{{ pr.additions }}</span>
+          <span class="del mono">−{{ pr.deletions }}</span>
         </span>
-        <span class="size">
-          <span class="add">+{{ pr.additions }}</span> <span class="del">−{{ pr.deletions }}</span>
-          <span class="muted">{{ i.files(pr.changedFiles) }}</span>
-        </span>
-        <span class="muted" :title="pr.updatedAt">{{ ago(pr.updatedAt) }}</span>
+        <span :title="pr.updatedAt">{{ ago(pr.updatedAt) }}</span>
+        <span v-if="wait" :class="{ late: wait.late }">{{ wait.text }}</span>
       </div>
+      <p v-if="why" class="why"><Info :size="14" />{{ why }}</p>
     </div>
 
-    <ul class="gh">
-      <li :class="decision.cls"><component :is="decision.icon" :size="14" />{{ decision.text }}</li>
-      <li v-if="pr.myReview" :class="{ warn: !pr.myReview.onHead }">
-        <CircleDot :size="14" />
-        <span>{{ i.my[pr.myReview.state]?.[pr.myReview.onHead ? 0 : 1] ?? pr.myReview.state }}</span>
-      </li>
-      <li v-if="ci" :class="ci.cls"><component :is="ci.icon" :size="14" />{{ ci.text }}</li>
-      <li v-if="pr.mergeable === 'CONFLICTING'" class="bad"><GitMerge :size="14" />{{ i.conflicts }}</li>
-      <li v-if="pr.threads.unresolved" class="warn">
-        <MessagesSquare :size="14" />{{ i.threads(pr.threads.unresolved) }}
-      </li>
-      <li v-if="pr.requested === 'team'" class="quiet">
-        <Users :size="14" /><span class="clip">{{ i.viaTeam(pr.teams.join(', ')) }}</span>
-      </li>
-    </ul>
-
-    <SieveStatus :pr="pr" :ahead="ahead" @dismiss="emit('dismiss')" />
+    <div class="stat">
+      <ul class="badges">
+        <li :class="decision.cls"><component :is="decision.icon" :size="14" />{{ decision.text }}</li>
+        <li v-if="pr.myReview" :class="{ warn: !pr.myReview.onHead }" :title="my?.[pr.myReview.onHead ? 1 : 2]">
+          <CircleDot :size="14" /><span class="clip">{{ my?.[0] ?? pr.myReview.state }}</span>
+        </li>
+        <li v-if="ci" :class="ci.cls" :title="ci.text"><component :is="ci.icon" :size="14" />CI</li>
+        <li v-if="pr.threads.unresolved" class="warn" :title="i.threads(pr.threads.unresolved)">
+          <MessagesSquare :size="14" />{{ pr.threads.unresolved }}
+        </li>
+        <li v-if="pr.mergeable === 'CONFLICTING'" class="bad"><GitMerge :size="14" />{{ i.conflicts }}</li>
+        <li v-if="pr.requested === 'team'" :title="i.viaTeam(teams)">
+          <Users :size="14" /><span class="clip">{{ teams }}</span>
+        </li>
+      </ul>
+      <SieveStatus :pr="pr" :ahead="ahead" @dismiss="emit('dismiss')" />
+    </div>
 
     <div class="act">
       <a
@@ -134,25 +155,54 @@ function act(kind: string) {
         <LoaderCircle v-if="opening && action.kind === 'open'" :size="14" class="spin" />
         {{ action.label }}
       </button>
-      <button
-        v-if="secondary"
-        class="link"
-        :title="secondary.kind === 'review' ? where : ''"
-        @click="act(secondary.kind)"
-      >
-        {{ secondary.label }}
+      <button class="ghost more-toggle" :aria-expanded="expanded" @click="emit('toggle')">
+        {{ expanded ? i.collapse : i.details }}
+        <ChevronDown :size="14" :class="{ flip: expanded }" />
       </button>
+    </div>
+
+    <div v-if="expanded" class="more">
+      <div class="more-head">
+        <h3>{{ i.history }}</h3>
+        <button v-if="cur && !active" :title="where" @click="emit('review')">{{ i.reviewAgain }}</button>
+        <button :title="i.snoozeHint" @click="emit('snooze')"><Clock :size="14" />{{ i.snooze }}</button>
+      </div>
+      <ol v-if="pr.runs.length" class="runs">
+        <li v-for="r in pr.runs" :key="r.runDir">
+          <span class="rail"><i :class="{ ring: !r.onHead }" :style="{ '--c': runColor(r) }" /></span>
+          <div class="run">
+            <div class="run-info">
+              <div class="run-head">
+                <strong>{{ when(r.createdAt) }}</strong>
+                <span class="mono muted">{{ r.headSha.slice(0, 7) }}</span>
+                <span class="pill" :class="{ cur: r.onHead }">{{ r.onHead ? i.currentCommit : i.olderCommit }}</span>
+              </div>
+              <div class="run-sub muted">
+                <template v-for="s in SEVERITIES" :key="s">
+                  <span v-if="r.findings[s]" class="sevn" :class="s" :title="s">{{ r.findings[s] }}</span>
+                </template>
+                <span>{{ summary(r) }}</span>
+              </div>
+            </div>
+            <a v-if="r.url" :href="r.url" target="_blank" rel="noopener" class="btn">{{ i.open }}</a>
+            <button v-else :disabled="opening" @click="emit('open', r.runDir)">{{ i.open }}</button>
+          </div>
+        </li>
+      </ol>
+      <p v-else class="muted none">{{ i.notReviewed }}</p>
     </div>
   </article>
 </template>
 
 <style scoped>
+/* Breakpoints are on the page width (container "inbox"): wide >= 1024, medium 640-1023, narrow < 640. */
 .row {
   display: grid;
-  grid-template-columns: var(--inbox-cols);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) 280px 136px;
+  grid-template-areas: 'pr stat act';
+  gap: 14px 28px;
   align-items: start;
-  padding: 14px 20px 14px 17px;
+  padding: 18px 22px 18px 19px;
   border-left: 3px solid transparent;
   border-bottom: 1px solid var(--border);
 }
@@ -164,30 +214,25 @@ function act(kind: string) {
   background: color-mix(in srgb, var(--accent-weak) 35%, transparent);
 }
 .pr {
+  grid-area: pr;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
 }
 .where {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px 8px;
   font-size: 12.5px;
   color: var(--muted);
-}
-.num {
-  font-variant-numeric: tabular-nums;
 }
 .label {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-size: 11.5px;
-  padding: 0 7px 0 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
 }
 .label i {
   width: 7px;
@@ -196,7 +241,7 @@ function act(kind: string) {
 }
 .title {
   color: var(--text);
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 600;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -209,92 +254,132 @@ function act(kind: string) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  column-gap: 14px;
-  row-gap: 2px;
-  font-size: 12.5px;
+  gap: 4px 14px;
+  font-size: 13px;
   color: var(--muted);
-  margin-top: 2px;
-}
-.branch {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11.5px;
-  max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 .size {
   display: inline-flex;
+  align-items: center;
   gap: 6px;
   font-variant-numeric: tabular-nums;
 }
+.size b {
+  font-size: 11px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.s-S {
+  color: var(--ok);
+}
+.s-M {
+  color: var(--accent);
+}
+.s-L {
+  color: var(--sev-major);
+}
+.s-XL {
+  color: var(--danger);
+}
 .add {
   color: var(--add-fg);
+  font-size: 12.5px;
 }
 .del {
   color: var(--del-fg);
+  font-size: 12.5px;
 }
-.gh {
+.late {
+  color: var(--sev-major);
+  font-weight: 600;
+}
+.why {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 2px 0 0;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.why .lucide {
+  flex: none;
+  margin-top: 1px;
+  color: var(--muted);
+}
+.stat {
+  grid-area: stat;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.badges {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 12.5px;
-  min-width: 0;
-}
-.gh li {
-  display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  color: var(--text);
-  min-width: 0;
 }
-.gh li > .lucide {
+.badges li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 12.5px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.badges .lucide {
+  flex: none;
   color: var(--muted);
 }
-.ok,
-.gh li.ok > .lucide {
+.badges .ok .lucide {
   color: var(--ok);
 }
-.bad,
-.gh li.bad,
-.gh li.bad > .lucide {
+.badges .bad .lucide {
   color: var(--danger);
 }
-.gh li.warn > .lucide {
+.badges .warn .lucide {
   color: var(--sev-major);
 }
-.gh li.quiet {
-  color: var(--muted);
-}
 .clip {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
 }
 .act {
+  grid-area: act;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
 }
-.act > button:not(.link),
-.btn {
+.act > button:not(.more-toggle),
+.act > .btn {
   justify-content: center;
+  padding: 8px 14px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 12px;
   color: var(--text);
   background: var(--panel);
+  white-space: nowrap;
 }
 .btn:hover {
   text-decoration: none;
@@ -312,46 +397,180 @@ function act(kind: string) {
 button.go {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  font-weight: 600;
 }
 button.go:hover:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
 }
-button.link {
-  border: none;
-  background: none;
-  padding: 2px 0;
-  color: var(--muted);
-  font-size: 12px;
+.more-toggle {
   justify-content: center;
-  text-decoration: underline;
-  text-decoration-color: var(--border);
-  text-underline-offset: 3px;
+  gap: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
 }
-button.link:hover:not(:disabled) {
-  background: none;
-  color: var(--text);
+.flip {
+  transform: rotate(180deg);
 }
-@media (max-width: 960px) {
+.more {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 4px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.more-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.more-head h3 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
+}
+.more-head button {
+  padding: 6px 11px;
+  font-size: 13px;
+}
+.runs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: 760px;
+}
+.runs li {
+  display: flex;
+  gap: 12px;
+}
+/* Timeline: a dot per run on a rail that runs down to the next one. */
+.rail {
+  flex: none;
+  width: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 15px;
+}
+.rail i {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  background: var(--c);
+}
+.rail i.ring {
+  background: var(--bg);
+  border: 2px solid var(--c);
+}
+.runs li:not(:last-child) .rail::after {
+  content: '';
+  flex: 1;
+  width: 2px;
+  margin-top: 4px;
+  background: var(--border);
+}
+/* Each run is a card, so its Open button sits inside the run it opens. */
+.run {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.run > .btn,
+.run > button {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.run-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.run-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 13.5px;
+}
+.run-head strong {
+  font-weight: 600;
+}
+.run-head .mono {
+  font-size: 12px;
+}
+.pill {
+  font-size: 12px;
+  color: var(--muted);
+}
+.pill.cur {
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--ok);
+  background: var(--ok-weak);
+}
+.run-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 12.5px;
+}
+.none {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+}
+@container inbox (width < 1024px) {
   .row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 10px 16px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'pr act' 'stat stat';
+    gap: 12px 20px;
   }
-  .pr {
-    grid-column: 1 / -1;
+  .stat {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 18px;
+  }
+}
+/* Narrow: no grid at all, the parts just stack. */
+@container inbox (width < 640px) {
+  .row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 16px 14px 13px;
   }
   .act {
-    grid-column: 1 / -1;
     flex-direction: row;
-    align-items: center;
   }
-}
-@media (max-width: 560px) {
-  .row {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 12px 16px 12px 13px;
+  .act > :first-child {
+    flex: 1;
+  }
+  .more {
+    padding: 12px 12px 4px;
   }
 }
 </style>

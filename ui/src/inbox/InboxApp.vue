@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import { RefreshCw, LoaderCircle, CircleAlert, Search, Inbox, Power, Info } from 'lucide-vue-next';
-import type { InboxBucket, InboxData, InboxPr } from '../../../shared/types';
+import type { InboxData, InboxPr, InboxTurn } from '../../../shared/types';
 import { inboxApi } from '../api';
 import { t, uiLang } from '../i18n';
 import { langCode } from '../store';
 import InboxRow from './InboxRow.vue';
 import ReviewerPicker from './ReviewerPicker.vue';
+import RepoFilter from './RepoFilter.vue';
 import LanguagePicker from '../components/LanguagePicker.vue';
-import { ago } from './ago';
+import { ago, waitFrom } from './ago';
 
 const data = ref<InboxData | null>(null);
 const loading = ref(true);
@@ -21,7 +22,32 @@ const stopped = ref(false);
 /** PR whose "Review" was clicked: the reviewer picker is open for it. */
 const picking = ref<InboxPr | null>(null);
 
-const ORDER: InboxBucket[] = ['reviewing', 'review'];
+const ORDER: InboxTurn[] = ['me', 'sieve', 'others', 'author', 'done'];
+
+/** A view setting kept in this browser; storage can be blocked, then it just isn't kept. */
+function stored<T>(key: string, fallback: T): Ref<T> {
+  const r = ref(fallback) as Ref<T>;
+  try {
+    const v = localStorage.getItem(key);
+    if (v) r.value = JSON.parse(v);
+  } catch {
+    /* keep the fallback */
+  }
+  watch(r, (v) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(v));
+    } catch {
+      /* not kept */
+    }
+  });
+  return r;
+}
+/** Repos to show, "owner/repo"; empty = all. */
+const repos = stored<string[]>('sieve.inbox.repos', []);
+const hideApproved = stored('sieve.inbox.hideApproved', true);
+/** The one row whose details are open. */
+const expanded = ref('');
+const toast = ref<{ text: string; undo: () => void } | null>(null);
 
 async function load(refresh = false) {
   refreshing.value = refresh;
@@ -43,27 +69,40 @@ const matches = (p: InboxPr, q: string) =>
     s.toLowerCase().includes(q),
   );
 
-/** Findings of the run on the current head still wait for you. */
-const pending = (p: InboxPr) =>
-  p.runs.some((r) => r.onHead && !r.reviews.length && (r.status.open > 0 || r.unpublished > 0));
+const repoOf = (p: InboxPr) => `${p.owner}/${p.repo}`;
+const urgent = (p: InboxPr) => Number(p.why !== 'findings' && p.why !== 'rerequested');
 
 /**
- * Not approved by anyone first, approved by others below; within each, PRs whose Sieve findings
- * wait for you go first (a just-finished review stays in view), then the most recently updated.
+ * Within a group: Sieve findings and re-requests first, then requests to you before your team's,
+ * not approved by anyone before approved, then the longest wait, then the most recently updated.
  */
 const byNeed = (a: InboxPr, b: InboxPr) =>
+  urgent(a) - urgent(b) ||
+  Number(a.requested === 'team') - Number(b.requested === 'team') ||
   Number(a.approvals > 0) - Number(b.approvals > 0) ||
-  Number(pending(b)) - Number(pending(a)) ||
+  // "~" sorts after any date: rows with no wait go last.
+  (waitFrom(a) ?? '~').localeCompare(waitFrom(b) ?? '~') ||
   b.updatedAt.localeCompare(a.updatedAt);
 
-const groups = computed(() => {
+const matched = computed(() => {
   const q = filter.value.trim().toLowerCase();
-  const prs = (data.value?.prs || []).filter((p) => matches(p, q));
-  return ORDER.map((id) => ({
-    id,
-    prs: prs.filter((p) => p.bucket === id).sort(byNeed),
-  })).filter((g) => g.prs.length);
+  return (data.value?.prs || []).filter((p) => matches(p, q));
 });
+const shown = computed(() => matched.value.filter((p) => !repos.value.length || repos.value.includes(repoOf(p))));
+const otherRepos = computed(() => matched.value.length - shown.value.length);
+const repoCounts = computed(() => {
+  const c: Record<string, number> = {};
+  for (const p of data.value?.prs || []) c[repoOf(p)] = (c[repoOf(p)] || 0) + 1;
+  return c;
+});
+
+const groups = computed(() =>
+  ORDER.map((id) => ({
+    id,
+    prs: shown.value.filter((p) => p.turn === id).sort(byNeed),
+    collapsed: (id === 'done' || id === 'others') && hideApproved.value,
+  })).filter((g) => g.prs.length),
+);
 
 /** Jobs started before this one that have not finished — for "Queued, 2 ahead". */
 const queue = computed(() =>
@@ -94,6 +133,22 @@ function review(only: string[]) {
 }
 const cancel = (p: InboxPr) => call(() => inboxApi.cancel(p.url));
 const dismiss = (p: InboxPr) => call(() => inboxApi.dismiss(p.url));
+
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+function snooze(p: InboxPr) {
+  expanded.value = '';
+  void call(() => inboxApi.snooze(p.url));
+  clearTimeout(toastTimer);
+  toast.value = { text: t.value.inbox.snoozedToast(p.number), undo: () => void call(() => inboxApi.unsnooze(p.url)) };
+  toastTimer = setTimeout(() => (toast.value = null), 6000);
+}
+function undo() {
+  const u = toast.value?.undo;
+  toast.value = null;
+  clearTimeout(toastTimer);
+  u?.();
+}
+const unsnoozeAll = () => call(() => inboxApi.unsnooze());
 
 async function setLanguages(body: { reportLanguage: string; commentLanguage: string; persist: boolean }) {
   try {
@@ -149,6 +204,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearInterval(poll);
   clearInterval(clock);
+  clearTimeout(toastTimer);
   window.removeEventListener('focus', onFocus);
 });
 
@@ -214,6 +270,11 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
             <Search :size="15" class="muted" />
             <input v-model="filter" type="text" :placeholder="t.inbox.filter" :aria-label="t.inbox.filter" />
           </label>
+          <RepoFilter v-model="repos" :counts="repoCounts" />
+          <label class="check">
+            <input v-model="hideApproved" type="checkbox" />
+            {{ t.inbox.hideApproved }}
+          </label>
           <span
             v-if="data?.query"
             class="query"
@@ -232,31 +293,49 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
 
         <section v-for="g in groups" :id="g.id" :key="g.id" class="group" :class="`b-${g.id}`">
           <div class="ghead">
+            <i class="dot" aria-hidden="true" />
             <h2>{{ t.inbox.groups[g.id]![0] }}</h2>
-            <span class="n">{{ g.prs.length }}</span>
-            <span class="hint muted">{{ t.inbox.groups[g.id]![1] }}</span>
+            <span class="count">{{ g.prs.length }}</span>
+            <span class="hint muted">· {{ t.inbox.groups[g.id]![1] }}</span>
+            <button v-if="g.collapsed" class="ghost show" @click="hideApproved = false">{{ t.inbox.show }}</button>
           </div>
-          <div class="list">
-            <div class="cols muted" aria-hidden="true">
-              <span>{{ t.inbox.colPr }}</span>
-              <span>{{ t.inbox.colGithub }}</span>
-              <span>{{ t.inbox.colSieve }}</span>
-              <span />
-            </div>
+          <div v-if="!g.collapsed" class="list">
             <InboxRow
               v-for="p in g.prs"
               :key="p.url"
               :pr="p"
               :ahead="ahead(p.url)"
               :opening="opening === p.url"
+              :expanded="expanded === p.url"
               @review="picking = p"
               @cancel="cancel(p)"
               @dismiss="dismiss(p)"
               @open="(dir) => open(p, dir)"
+              @toggle="expanded = expanded === p.url ? '' : p.url"
+              @snooze="snooze(p)"
             />
           </div>
         </section>
+
+        <p v-if="otherRepos || data?.snoozed.length" class="not-shown muted">
+          <span>{{ t.inbox.notShown }}</span>
+          <span v-if="otherRepos">
+            {{ t.inbox.otherRepos(otherRepos) }}
+            <button class="ghost" @click="repos = []">{{ t.inbox.showAll }}</button>
+          </span>
+          <span v-if="data?.snoozed.length">
+            {{ t.inbox.snoozedN(data.snoozed.length) }}
+            <button class="ghost" @click="unsnoozeAll">{{ t.inbox.restore }}</button>
+          </span>
+        </p>
       </template>
+
+      <div v-if="toast" class="toast-wrap">
+        <div class="toast" role="status">
+          <span>{{ toast.text }}</span>
+          <button @click="undo">{{ t.inbox.undo }}</button>
+        </div>
+      </div>
     </main>
     <ReviewerPicker v-if="picking" :pr="picking" @start="review" @close="picking = null" />
   </div>
@@ -264,7 +343,6 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
 
 <style scoped>
 .page {
-  --inbox-cols: minmax(0, 1.7fr) minmax(170px, 0.8fr) minmax(220px, 1fr) 128px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -346,6 +424,8 @@ h1 {
   white-space: nowrap;
 }
 .main {
+  /* Rows lay out by the page width, not the window: see InboxRow. */
+  container: inbox / inline-size;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -372,12 +452,22 @@ h1 {
 }
 .tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 10px 16px;
+  margin-bottom: 22px;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  white-space: nowrap;
+  cursor: pointer;
 }
 .search {
-  flex: 0 1 420px;
+  flex: 1 1 280px;
+  max-width: 420px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -410,36 +500,57 @@ h1 {
 .query:focus-visible {
   box-shadow: 0 0 0 3px var(--accent-weak);
 }
-.cols {
-  display: grid;
-  grid-template-columns: var(--inbox-cols);
-  gap: 20px;
-  padding: 7px 20px 7px 20px;
-  font-size: 12px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel-2) 50%, transparent);
-}
 .group {
   margin-bottom: 28px;
 }
+.group {
+  --dot: var(--accent);
+}
+.group.b-sieve {
+  --dot: #2f7ae5;
+}
+.group.b-others {
+  --dot: color-mix(in srgb, var(--ok) 45%, var(--border));
+}
+.group.b-author {
+  --dot: var(--sev-major);
+}
+.group.b-done {
+  --dot: var(--ok);
+}
 .ghead {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 0 4px 8px;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 0 4px 10px;
+}
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--dot);
 }
 .ghead h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
-.ghead .n {
-  background: var(--accent);
-  color: var(--accent-text);
+.count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.show {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
 }
 .hint {
-  font-size: 12.5px;
+  font-size: 13px;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -450,6 +561,54 @@ h1 {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+}
+.not-shown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 20px 0 0;
+  padding: 0 4px;
+  font-size: 13px;
+}
+.not-shown button {
+  padding: 2px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.toast-wrap {
+  position: sticky;
+  bottom: 20px;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px 10px 16px;
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 14px;
+  box-shadow: var(--shadow);
+}
+.toast button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  padding: 2px 4px;
+}
+.toast button:hover:not(:disabled) {
+  background: transparent;
 }
 .state {
   display: flex;
@@ -476,8 +635,12 @@ h1 {
     display: none;
   }
 }
+@media (prefers-color-scheme: dark) {
+  .group.b-sieve {
+    --dot: #5b9bff;
+  }
+}
 @media (max-width: 960px) {
-  .cols,
   .jump,
   .who {
     display: none;

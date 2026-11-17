@@ -123,18 +123,24 @@ When the map is built is set by `map.mode`:
 
 A page at `http://127.0.0.1:7438/inbox` (always the same port, `inbox.port`) with every open PR that requests your review, across all repos your `gh` token can see — with what GitHub says about it and what Sieve has done with it. Start a review with one click; it runs in the background and the page shows how far it got.
 
-Only PRs that need something from you are listed, in two groups:
+PRs are grouped by whose move it is:
 
-- **In progress** — a Sieve review is running or queued.
-- **To review** — you are requested and have not reviewed the current commit, or new commits came after your review or approval. PRs nobody has approved on their current commit come first (an approval given before newer commits does not count), then those approved by others; within each, PRs whose Sieve findings wait for you go first.
+- **Your turn** — your review is requested (for the first time, again after your review, or via your team), or Sieve findings on the current commit wait for you to go through or publish.
+- **Sieve is on it** — a Sieve review is running or queued.
+- **Approved by others** — your review is still requested, but someone else approved the current commit, or GitHub already counts the PR as approved.
+- **Waiting for the author** — the PR has merge conflicts (even if your review is requested or findings wait), or you requested changes or commented and your review was not requested again, even if new commits came.
+- **Done** — you approved, or only your team was asked and GitHub counts the PR as approved.
 
-PRs you already reviewed or approved on their current commit (comments published from Sieve included) are hidden until new commits come, as are merged and closed ones. Being personally requested again, or your review being dismissed, brings a PR back.
+Within a group, Sieve findings and repeated requests come first, then requests to you before your team's, PRs nobody approved before approved ones, then the longest wait. Merged and closed PRs are not listed.
 
 Each row shows:
 
-- **On GitHub** — review decision and approvals, your last review and whether new commits came after it, CI checks, merge conflicts, unresolved threads, the team you were requested through, labels, size.
-- **In Sieve** — findings of the run on the current head by severity, how many are left to go through or ready to publish, the published review, whether a map was built; a run on an older commit is marked as such.
-- **Action** — Review / Open / Review again / Cancel. While a review runs, the Sieve column shows a progress ring and what it is doing ("Reviewers 2 of 4", "Checked 6 of 14 findings") with the elapsed time.
+- **The PR** — repo, number, labels, title, author, size (S/M/L/XL by changed lines), how long it has waited for you or for the author, and why it is in its group.
+- **GitHub** — review decision, your last review (orange when new commits came after it), CI, unresolved threads, merge conflicts, the team you were requested through.
+- **Sieve** — a dot per run (filled: on the current commit, ring: on an older one, coloured by the worst finding) and what is left on the current commit: to go through, ready to publish, published, map built. While a review runs: a progress ring, what it is doing ("Reviewers 2 of 4", "Checked 6 of 14 findings") and the elapsed time.
+- **Action** — Review / Open / Retry / Cancel, and **Details**: every run with its commit, findings and how far it was gone through, **Review again**, and **Snooze** — the PR leaves the page until its next commit (kept in `~/.sieve/inbox-state.json`).
+
+Above the list: a search, a repository filter and **Hide approved**, which collapses Approved by others and Done; the filter and the checkbox are kept in the browser. Below it: how many PRs the repository filter and snoozes leave out, with a link to bring them back.
 
 The header has **Stop** (stops the inbox server, cancelling running and queued reviews) and the same language button as the review page; there "save as default" writes `~/.sieve/settings.json`, since the inbox spans projects.
 
@@ -301,7 +307,7 @@ bun run dev:ui                # Vite dev server, proxies /api to :4545 (or $SIEV
 
 Try the plugin without installing: `claude --plugin-dir /path/to/sieve`, then `/sieve:review`.
 
-Server API (used by the UI): `GET /api/run`, `PATCH /api/findings/:id`, `POST /api/findings/:id/{chat,comment,reset}` (SSE for chat/comment), `GET /api/findings/:id/context`, `GET /api/code?file=&line=&endLine=`, `GET /api/map`, `POST /api/map/build` (SSE), `GET /api/map/progress` (SSE), `POST /api/map/cancel`, `POST /api/map/nodes/:flowId/:nodeId/{chat,reset}`, `GET /api/publish/preview`, `POST /api/publish`, `GET /api/export`. Inbox server: `GET /api/inbox[?refresh=1]`, `POST /api/inbox/{review,cancel,dismiss}` (`{ url }`), `POST /api/inbox/open` (`{ runDir }`), `PUT /api/inbox/settings`, `POST /api/inbox/shutdown`, `GET /api/inbox/ping`.
+Server API (used by the UI): `GET /api/run`, `PATCH /api/findings/:id`, `POST /api/findings/:id/{chat,comment,reset}` (SSE for chat/comment), `GET /api/findings/:id/context`, `GET /api/code?file=&line=&endLine=`, `GET /api/map`, `POST /api/map/build` (SSE), `GET /api/map/progress` (SSE), `POST /api/map/cancel`, `POST /api/map/nodes/:flowId/:nodeId/{chat,reset}`, `GET /api/publish/preview`, `POST /api/publish`, `GET /api/export`. Inbox server: `GET /api/inbox[?refresh=1]`, `POST /api/inbox/{review,cancel,dismiss,snooze}` (`{ url }`), `POST /api/inbox/unsnooze` (`{ url? }`), `POST /api/inbox/open` (`{ runDir }`), `PUT /api/inbox/settings`, `POST /api/inbox/shutdown`, `GET /api/inbox/ping`.
 
 ```
 .claude-plugin/        plugin + marketplace manifests

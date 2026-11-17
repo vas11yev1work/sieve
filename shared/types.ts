@@ -197,8 +197,23 @@ export interface InboxSettings {
 
 // ───────────── Inbox ─────────────
 
-/** reviewing = a Sieve review is running or queued; review = something is needed from you. */
-export type InboxBucket = 'reviewing' | 'review';
+/** Whose turn it is: Sieve is reviewing, yours, the author's, or nothing left (approved). */
+/** `others`: your review is still asked for, but someone else already approved. */
+export type InboxTurn = 'sieve' | 'me' | 'others' | 'author' | 'done';
+
+/** Why a PR is in its group; the page turns it into the reason line. */
+export type InboxWhy =
+  | 'job'
+  | 'findings'
+  | 'requested'
+  | 'rerequested'
+  | 'team'
+  | 'enough'
+  | 'approved'
+  | 'changes'
+  | 'commented'
+  | 'dismissed'
+  | 'conflicts';
 
 /** A Sieve run of one PR found on disk. */
 export interface InboxRun {
@@ -256,8 +271,10 @@ export interface InboxPr {
   deletions: number;
   changedFiles: number;
   labels: { name: string; color: string }[];
-  /** Why it is in the inbox: requested from you, from your team, or you reviewed it before. */
+  /** Review requested right now: from you, from your team, or not (you reviewed it before). */
   requested: 'me' | 'team' | null;
+  /** When the current review request was made (you or one of `teams`). */
+  requestedAt?: string;
   teams: string[];
   decision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
   approvals: number;
@@ -272,7 +289,8 @@ export interface InboxPr {
   /** Newest first. */
   runs: InboxRun[];
   job?: InboxJob;
-  bucket: InboxBucket;
+  turn: InboxTurn;
+  why: InboxWhy;
 }
 
 export interface InboxData {
@@ -284,6 +302,8 @@ export interface InboxData {
   reportLanguage: string;
   commentLanguage: string;
   prs: InboxPr[];
+  /** URLs snoozed until new commits. */
+  snoozed: string[];
 }
 
 export interface ParsedDiffLine {

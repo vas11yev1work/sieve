@@ -8,7 +8,16 @@ import { dirname, join, resolve } from 'node:path';
 import type { InboxData, InboxJob, InboxPr, InboxReviewer, Settings } from '../shared/types.ts';
 import { loadSettings, SIEVE_HOME } from '../cli/lib/settings.ts';
 import { allReviewers, loadReviewers } from '../cli/lib/reviewers.ts';
-import { bucketOf, checkoutOf, fetchInbox, inboxSettings, localRuns } from '../cli/lib/inbox.ts';
+import {
+  applyInboxState,
+  checkoutOf,
+  fetchInbox,
+  inboxSettings,
+  loadInboxState,
+  localRuns,
+  saveInboxState,
+  turnOf,
+} from '../cli/lib/inbox.ts';
 import { paths, writeJson } from '../cli/lib/run.ts';
 import { runClaude } from './claude.ts';
 import { ensureUi, openBrowser, staticUi } from './index.ts';
@@ -41,13 +50,19 @@ export async function inboxData(
       error = (e as Error).message;
     }
   }
-  const prs: InboxPr[] = [];
+  const all: InboxPr[] = [];
   for (const p of gh?.prs || []) {
     const job = jobs.get(p.url);
-    const bucket = bucketOf({ ...p, job });
-    if (!bucket) continue; // nothing needed from you
-    const checkout = checkoutOf(s.inbox, p.owner, p.repo);
-    prs.push({ ...p, checkout, runs: localRuns(p), job, bucket });
+    const runs = localRuns(p);
+    const turn = turnOf({ ...p, job, runs });
+    if (!turn) continue;
+    all.push({ ...p, checkout: checkoutOf(s.inbox, p.owner, p.repo), runs, job, ...turn });
+  }
+  const state = loadInboxState();
+  const { shown: prs, snoozed, expired } = applyInboxState(all, state);
+  if (expired.length) {
+    for (const url of expired) delete state.snoozed[url];
+    saveInboxState(state);
   }
   return {
     enabled: s.inbox.enabled,
@@ -58,6 +73,7 @@ export async function inboxData(
     reportLanguage: s.reportLanguage,
     commentLanguage: s.commentLanguage,
     prs,
+    snoozed,
   };
 }
 
@@ -122,6 +138,7 @@ export function createInboxApp(o: InboxServerOptions) {
         reportLanguage: s.reportLanguage,
         commentLanguage: s.commentLanguage,
         prs: [],
+        snoozed: [],
       } as InboxData;
     // ponytail: GitHub is asked at most once a minute unless the user refreshes; polling reads the cache
     if (refresh || !gh || Date.now() - gh.at > 60_000) {
@@ -250,6 +267,27 @@ export function createInboxApp(o: InboxServerOptions) {
     const { url } = await c.req.json<{ url: string }>();
     const job = jobs.get(url);
     if (job && job.state !== 'queued' && job.state !== 'running') jobs.delete(url);
+    return c.json({ ok: true });
+  });
+
+  /** Take a PR off the page until its next commit; unsnooze brings it back. */
+  app.post('/api/inbox/snooze', async (c) => {
+    const { url } = await c.req.json<{ url: string }>();
+    const pr = gh?.rows?.prs.find((p) => p.url === url);
+    if (!pr) return c.json({ error: 'This PR is not in the inbox. Refresh the page.' }, 404);
+    const st = loadInboxState();
+    st.snoozed[url] = pr.headSha;
+    saveInboxState(st);
+    return c.json({ ok: true });
+  });
+
+  /** `url` brings back one PR; without it, every snoozed PR. */
+  app.post('/api/inbox/unsnooze', async (c) => {
+    const { url } = await c.req.json<{ url?: string }>();
+    const st = loadInboxState();
+    if (url) delete st.snoozed[url];
+    else st.snoozed = {};
+    saveInboxState(st);
     return c.json({ ok: true });
   });
 
