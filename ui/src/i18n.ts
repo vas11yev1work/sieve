@@ -121,7 +121,7 @@ const en = {
       sieve: ['Sieve is on it', 'A review is running or queued'],
       me: ['Your turn', 'Review requested, or findings wait for you'],
       others: ['Approved by others', 'Your review is requested, but someone already approved'],
-      author: ['Waiting for the author', 'You replied; review not requested again'],
+      author: ['Waiting for the author', 'You replied and review was not requested again, or there are conflicts'],
       done: ['Done', 'You approved, or approvals are enough'],
     } as Record<string, [string, string]>,
     /** The reason line; `fresh` = your review is on the current commit. */
@@ -141,6 +141,7 @@ const en = {
       commented: (_: string, fresh: boolean) =>
         fresh ? 'You commented, no new commits' : 'You commented; new commits, review not requested again',
       dismissed: () => 'Your review was dismissed, review not requested again',
+      conflicts: () => 'Merge conflicts: the author resolves them first',
     } as Record<string, (team: string, fresh: boolean) => string>,
     waitYou: (d: string) => `waits for you ${d}`,
     waitAuthor: (d: string) => `with the author ${d}`,
@@ -358,7 +359,7 @@ const ru: typeof en = {
       sieve: ['Sieve работает', 'Ревью идёт или в очереди'],
       me: ['Твой ход', 'Ревью запрошено или находки ждут разбора'],
       others: ['Одобрены другими', 'Ревью у тебя запрошено, но кто-то уже одобрил'],
-      author: ['Ждёт автора', 'Ты ответил, ревью не перезапрошено'],
+      author: ['Ждёт автора', 'Ты ответил и ревью не перезапрошено, или есть конфликты'],
       done: ['Готово', 'Ты одобрил или одобрений хватает'],
     } as Record<string, [string, string]>,
     why: {
@@ -377,6 +378,7 @@ const ru: typeof en = {
       commented: (_: string, fresh: boolean) =>
         fresh ? 'Ты комментировал, новых коммитов нет' : 'Ты комментировал; есть новые коммиты, ревью не перезапрошено',
       dismissed: () => 'Твоё ревью сброшено, ревью не перезапрошено',
+      conflicts: () => 'Конфликты с базовой веткой — сначала их решает автор',
     } as Record<string, (team: string, fresh: boolean) => string>,
     waitYou: (d: string) => `ждёт тебя ${d}`,
     waitAuthor: (d: string) => `у автора ${d}`,

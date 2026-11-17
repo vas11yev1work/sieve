@@ -251,9 +251,11 @@ export function pendingRun(runs: InboxRun[]): InboxRun | undefined {
  * - done: you approved and nobody asked you again; or only your team is asked and the PR is approved already.
  */
 export function turnOf(
-  pr: Pick<InboxPr, 'requested' | 'myReview' | 'job' | 'runs' | 'decision' | 'approvals'>,
+  pr: Pick<InboxPr, 'requested' | 'myReview' | 'job' | 'runs' | 'decision' | 'approvals' | 'mergeable'>,
 ): { turn: InboxTurn; why: InboxWhy } | null {
   if (pr.job && (pr.job.state === 'queued' || pr.job.state === 'running')) return { turn: 'sieve', why: 'job' };
+  // Conflicts first: the author's fix brings new commits, whatever else waits on this one.
+  if (pr.mergeable === 'CONFLICTING' && (pr.requested || pr.myReview)) return { turn: 'author', why: 'conflicts' };
   if (pendingRun(pr.runs)) return { turn: 'me', why: 'findings' };
   // Still asked of you, but someone else approved: a group of its own, below your turn.
   const asked = pr.decision === 'APPROVED' || pr.approvals > 0 ? 'others' : 'me';

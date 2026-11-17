@@ -128,7 +128,7 @@ PRs are grouped by whose move it is:
 - **Your turn** — your review is requested (for the first time, again after your review, or via your team), or Sieve findings on the current commit wait for you to go through or publish.
 - **Sieve is on it** — a Sieve review is running or queued.
 - **Approved by others** — your review is still requested, but someone else approved the current commit, or GitHub already counts the PR as approved.
-- **Waiting for the author** — you requested changes or commented, and your review was not requested again, even if new commits came.
+- **Waiting for the author** — the PR has merge conflicts (even if your review is requested or findings wait), or you requested changes or commented and your review was not requested again, even if new commits came.
 - **Done** — you approved, or only your team was asked and GitHub counts the PR as approved.
 
 Within a group, Sieve findings and repeated requests come first, then requests to you before your team's, PRs nobody approved before approved ones, then the longest wait. Merged and closed PRs are not listed.

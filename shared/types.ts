@@ -212,7 +212,8 @@ export type InboxWhy =
   | 'approved'
   | 'changes'
   | 'commented'
-  | 'dismissed';
+  | 'dismissed'
+  | 'conflicts';
 
 /** A Sieve run of one PR found on disk. */
 export interface InboxRun {

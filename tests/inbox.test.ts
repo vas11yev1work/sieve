@@ -19,6 +19,7 @@ describe('turnOf', () => {
     runs: [],
     decision: null,
     approvals: 0,
+    mergeable: 'MERGEABLE' as const,
     ...o,
   });
   const turn = (o: Partial<Parameters<typeof turnOf>[0]>) => turnOf(pr(o));
@@ -37,6 +38,14 @@ describe('turnOf', () => {
     expect(turn({ requested: 'me', decision: 'APPROVED' })?.turn).toBe('others');
     expect(turn({ requested: 'team', approvals: 1 })).toEqual({ turn: 'others', why: 'team' });
     expect(turn({ requested: 'me', approvals: 1, runs: [run(true, 2)] })).toEqual({ turn: 'me', why: 'findings' });
+  });
+
+  test("merge conflicts are the author's turn, even when you are requested or findings wait", () => {
+    expect(turn({ requested: 'me', mergeable: 'CONFLICTING' })).toEqual({ turn: 'author', why: 'conflicts' });
+    expect(turn({ myReview: mine('APPROVED', true), mergeable: 'CONFLICTING', runs: [run(true, 2)] })?.turn).toBe(
+      'author',
+    );
+    expect(turn({ mergeable: 'CONFLICTING' })).toBeNull();
   });
 
   test("new commits without a new request stay the author's turn", () => {
