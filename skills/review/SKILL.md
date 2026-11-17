@@ -37,12 +37,16 @@ Remember `runDir`, `reviewers`, `reportLanguage`, `map` (present only when the m
 
 ## 2. Run reviewers in parallel
 
-In ONE message, launch one Task per entry in `reviewers` (they must run in parallel):
+A large change is split into parts (`shards` > 1 in the `prepare` output): then a reviewer has one entry per part,
+with `shard: { index, count }`. Every entry is its own agent.
+
+In ONE message, launch one Task per entry in `reviewers` (they must run in parallel). With more than 12 entries,
+launch them in waves of at most 12 per message.
 
 - `subagent_type`: `general-purpose`
 - `model`: the reviewer's `model`
 - `effort`: the reviewer's `effort` — only when the entry has one; otherwise leave `effort` out
-- `description`: `Sieve: <name>`
+- `description`: `Sieve: <name>`, plus ` <index>/<count>` when the entry has `shard`
 - `prompt`:
 
   > Read the file `<prompt>` and follow its instructions exactly. Use only read-only tools.
@@ -62,13 +66,16 @@ The cartographer does not take part in merging or validation — keep its answer
 
 ## 3. Merge and register candidates
 
-Each reviewer returns `{ verdict, summary, findings }`. Record one entry per reviewer in `reviews`:
-`{ "name": "<name>", "verdict": "<verdict>", "summary": "<summary>" }`. If a reviewer failed or returned
-something unparsable, record `{ "name": "<name>", "verdict": "failed", "summary": "<what went wrong, briefly, in reportLanguage>" }`
+Each reviewer returns `{ verdict, summary, checkedFiles, findings }`. Record one entry per Task in `reviews`:
+`{ "name": "<name>", "shard": <index>, "verdict": "<verdict>", "summary": "<summary>", "checkedFiles": [ ...as returned... ] }`
+— `shard` only when the entry had one; copy `checkedFiles` as is and leave it out only when the reviewer did not return it.
+The CLI merges the parts of one reviewer and turns a `clean` that left files unchecked into `incomplete`.
+If a reviewer failed or returned something unparsable, record
+`{ "name": "<name>", "shard": <index>, "verdict": "failed", "summary": "<what went wrong, briefly, in reportLanguage>" }`
 and remember to mention it. If it returned a bare array, treat it as its `findings` with verdict
 `issues` (or `clean` when empty).
 
-Merge the `findings` of all reviewers. Merge duplicates: findings about the same underlying problem at the same place (same file, overlapping
+Merge the `findings` of all reviewers (all parts of a reviewer count as that reviewer). Merge duplicates: findings about the same underlying problem at the same place (same file, overlapping
 lines) become one — keep the clearest title/explanation, the highest severity, and list all reviewer
 names in `reviewers`. Set `reviewers: ["<name>"]` on every other finding. Do not invent, reword or drop
 findings beyond merging.

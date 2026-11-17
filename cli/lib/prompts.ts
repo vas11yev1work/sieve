@@ -34,9 +34,11 @@ export function diffStats(files: ParsedFile[]) {
   return { additions, deletions, per };
 }
 
+const MAX_LISTED = 200;
+
 function commonVars(meta: RunMeta, settings: Settings, files: ParsedFile[]) {
   const s = diffStats(files);
-  const MAX = 200;
+  const MAX = MAX_LISTED;
   const list = s.per
     .slice(0, MAX)
     .map((f) => `  - \`${f.path}\` (${f.status}${f.binary ? ', binary' : `, +${f.additions}/-${f.deletions}`})`)
@@ -60,6 +62,14 @@ function commonVars(meta: RunMeta, settings: Settings, files: ParsedFile[]) {
   };
 }
 
+/** One part of a large change, reviewed by its own agent. */
+export interface PromptPart {
+  index: number;
+  count: number;
+  /** Diff with only this part's files. */
+  patchPath: string;
+}
+
 export function reviewerPrompt(
   sieveRoot: string,
   meta: RunMeta,
@@ -67,6 +77,7 @@ export function reviewerPrompt(
   files: ParsedFile[],
   rules: RuleFile[],
   reviewer: Reviewer,
+  part?: PromptPart & { files: ParsedFile[] },
 ): string {
   const rulesSection = rules.length
     ? '- Project rules that apply to this change (read the ones relevant to your focus):\n' +
@@ -85,8 +96,27 @@ export function reviewerPrompt(
     ? `${readOnly} You may also use: ${reviewer.tools.map((t) => `\`${t}\``).join(', ')}. Do not modify tracked files in the worktree. Stop every process you started before returning.`
     : `${readOnly} Never modify files, never run builds, tests, linters or installs.`;
 
+  const mine = new Set(part?.files.map((f) => f.path));
+  const others = files.filter((f) => !mine.has(f.path)).map((f) => f.path);
+  const shardSection = part
+    ? [
+        '## Your part of the change',
+        '',
+        `The change is large, so it is split into ${part.count} parts, each reviewed by its own agent with the same focus.`,
+        `You own part ${part.index} of ${part.count}: the files under "Changed files" above, diff \`${part.patchPath}\`.`,
+        '',
+        `- You may open any file in the worktree and the full diff \`${paths(meta.runDir).patch}\` to follow calls and check contracts across parts. Report problems in your files; report one in another part only when your files cause it.`,
+        '- Before you claim that something is missing, unused, not updated or not handled, search the whole worktree for it: it may live in another part.',
+        '- Changed files in the other parts (reviewed by the other agents):',
+        ...others.slice(0, MAX_LISTED).map((f) => `  - \`${f}\``),
+        ...(others.length > MAX_LISTED ? [`  - … and ${others.length - MAX_LISTED} more (see the full diff)`] : []),
+      ].join('\n')
+    : '';
+
   return render(template(sieveRoot, 'reviewer.md'), {
     ...commonVars(meta, settings, files),
+    ...(part ? { ...commonVars(meta, settings, part.files), diffPath: part.patchPath } : {}),
+    shardSection,
     name: reviewer.name,
     focus: reviewer.body,
     defaultCategory: reviewer.category,

@@ -23,13 +23,15 @@ Description from the author (use it to understand intent, not as a source of tru
 ## Where things are
 
 - Code at the reviewed revision (read-only, use absolute paths): `{{worktree}}`
-- Full unified diff: `{{diffPath}}` ({{fileCount}} files, +{{additions}} / -{{deletions}}). If it is long, read it in chunks with offset/limit.
+- Unified diff of the files below: `{{diffPath}}` ({{fileCount}} files, +{{additions}} / -{{deletions}}). If it is long, read it in chunks with offset/limit.
 - Changed files:
 {{fileList}}
 {{rulesSection}}
 {{learnedSection}}
 
 {{permissionsSection}}
+
+{{shardSection}}
 
 ## What to report
 
@@ -61,9 +63,14 @@ Return ONLY a JSON object, no prose before or after, no code fences:
 {
   "verdict": "clean" | "issues" | "incomplete",
   "summary": "1-2 sentences: what you checked and what you concluded",
+  "checkedFiles": [ "path/relative/to/repo/root.ts", ... ],
   "findings": [ ...items as below... ]
 }
 ```
+
+- `checkedFiles` — every file from "Changed files" you accounted for: you read its changes with your focus in mind,
+  or its path and type alone show it is outside your focus (locale files for a styles reviewer). A file you did not
+  get to is not checked: leave it out, and the verdict cannot be `clean`. Sieve compares this list with "Changed files".
 
 - `clean` — you checked everything in your focus and found nothing worth reporting (`findings` is `[]`);
 - `issues` — you found problems, they are in `findings`;

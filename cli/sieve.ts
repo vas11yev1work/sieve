@@ -48,6 +48,7 @@ import { reviewerPrompt, validatorPrompt, validatorModel, diffStats, mapPrompt }
 import { normalizeMap, parseMapOutput } from './lib/map.ts';
 import { paths, readJson, writeJson, loadRun, parseJsonLoose, repoRunsDir } from './lib/run.ts';
 import { fetchPrComments } from './lib/threads.ts';
+import { groupFiles, importEdges, mergeReviews, shardCount, type RawReview } from './lib/shards.ts';
 import { ghPrState, olderRevisions, planPrune, prRunsWithWorktree, removeWorktree, sizeKb } from './lib/prune.ts';
 
 export const SIEVE_ROOT = resolve(dirname(import.meta.path), '..');
@@ -227,6 +228,7 @@ async function prepare(argv: string[]) {
   mkdirSync(meta.runDir, { recursive: true });
   rmSync(p.prompts, { recursive: true, force: true });
   for (const f of [p.candidates, p.findings, p.reviews, p.state, p.map]) rmSync(f, { force: true });
+  for (const f of readdirSync(meta.runDir)) if (/^diff-\d+\.patch$/.test(f)) rmSync(join(meta.runDir, f));
   writeFileSync(p.patch, patch);
   writeJson(p.diff, files);
   writeJson(p.meta, meta);
@@ -237,20 +239,46 @@ async function prepare(argv: string[]) {
   writeJson(p.rules, rules);
 
   const reviewers = loadReviewers(SIEVE_ROOT, meta.repoRoot, settings, only, skip);
-  mkdirSync(p.prompts, { recursive: true });
-  const plan = reviewers.map((r) => {
-    const file = join(p.prompts, `review-${r.name}.md`);
-    writeFileSync(file, reviewerPrompt(SIEVE_ROOT, meta, settings, files, rules, r));
+  const stats = diffStats(files);
+
+  // A large change is split into parts of related files; each part gets its own agent per reviewer.
+  const count = shardCount(stats.per, settings.sharding);
+  const shards = count > 1 ? groupFiles(stats.per, importEdges(meta.worktree, meta.changedFiles), count) : [];
+  writeJson(p.shards, shards);
+  const parts = shards.map((group, i) => {
+    const inPart = new Set(group);
+    writeFileSync(
+      p.shardPatch(i + 1),
+      kept
+        .filter((k) => inPart.has(k.path))
+        .map((k) => k.text)
+        .join(''),
+    );
     return {
-      name: r.name,
-      model: r.model,
-      effort: r.effort,
-      description: r.description,
-      prompt: file,
-      tools: r.tools,
-      validate: r.validate,
+      index: i + 1,
+      count: shards.length,
+      patchPath: p.shardPatch(i + 1),
+      files: files.filter((f) => inPart.has(f.path)),
     };
   });
+
+  mkdirSync(p.prompts, { recursive: true });
+  const plan = reviewers.flatMap((r) =>
+    (r.shard && parts.length ? parts : [undefined]).map((part) => {
+      const file = join(p.prompts, `review-${r.name}${part ? `-${part.index}` : ''}.md`);
+      writeFileSync(file, reviewerPrompt(SIEVE_ROOT, meta, settings, files, rules, r, part));
+      return {
+        name: r.name,
+        model: r.model,
+        effort: r.effort,
+        description: r.description,
+        prompt: file,
+        tools: r.tools,
+        validate: r.validate,
+        ...(part ? { shard: { index: part.index, count: part.count } } : {}),
+      };
+    }),
+  );
   writeJson(p.reviewers, plan);
 
   let map: { model: string; prompt: string } | undefined;
@@ -259,7 +287,6 @@ async function prepare(argv: string[]) {
     map = { model: settings.map.model, prompt: p.mapPrompt };
   }
 
-  const stats = diffStats(files);
   let stop: string | undefined;
   if (!files.length) stop = 'Nothing to review: the diff is empty (after ignore filters).';
   else if (meta.mode === 'pr' && meta.state && meta.state !== 'OPEN' && !values.force)
@@ -279,6 +306,7 @@ async function prepare(argv: string[]) {
     commentLanguage: settings.commentLanguage,
     mapMode: settings.map.mode,
     rules: rules.map((r) => r.path),
+    shards: shards.length || 1,
     reviewers: plan,
     ...(prComments.length ? { prComments: p.prComments } : {}),
     ...(map ? { map } : {}),
@@ -309,14 +337,13 @@ async function candidates(argv: string[]) {
   const raw = parseJsonLoose(await readStdin());
   const input = raw as { findings?: RawFinding[]; reviews?: ReviewerVerdict[] };
   const list: RawFinding[] = Array.isArray(raw) ? raw : (input.findings ?? []);
-  const VERDICTS = ['clean', 'issues', 'incomplete', 'failed'];
-  const reviews: ReviewerVerdict[] = (Array.isArray(raw) ? [] : (input.reviews ?? []))
-    .filter((r) => r?.name)
-    .map((r) => ({
-      name: r.name,
-      verdict: VERDICTS.includes(r.verdict) ? r.verdict : 'failed',
-      summary: r.summary,
-    }));
+  const shards = readJson<string[][]>(paths(runDir).shards, []);
+  const reviews: ReviewerVerdict[] = mergeReviews(
+    (Array.isArray(raw) ? [] : ((input.reviews ?? []) as RawReview[])).filter((r) => r?.name),
+    readJson<{ name: string; shard?: { index: number; count: number } }[]>(paths(runDir).reviewers, []),
+    (shard) => (shard ? shards[shard - 1] || [] : meta.changedFiles),
+    (f) => normalizePath(f, meta),
+  );
   writeJson(paths(runDir).reviews, reviews);
 
   const dropped: { title?: string; reason: string }[] = [];

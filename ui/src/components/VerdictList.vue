@@ -43,6 +43,14 @@ function showFindings(name: string) {
       </div>
       <div class="name">{{ r.name }}</div>
       <div v-if="r.summary" class="summary"><Markdown inline :text="r.summary" /></div>
+      <details v-if="r.unchecked?.length" class="unchecked">
+        <summary>{{ t.uncheckedFiles(r.unchecked.length) }}</summary>
+        <ul>
+          <li v-for="f in r.unchecked" :key="f">
+            <code>{{ f }}</code>
+          </li>
+        </ul>
+      </details>
       <button v-if="r.findings" class="ghost show" @click="showFindings(r.name)">
         {{ t.showFindings(r.findings) }}
       </button>
@@ -99,6 +107,19 @@ function showFindings(name: string) {
 .item:has(.incomplete) .summary,
 .item:has(.failed) .summary {
   color: var(--text);
+}
+.unchecked {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+.unchecked summary {
+  cursor: pointer;
+  color: var(--sev-major);
+}
+.unchecked ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
 }
 .show {
   margin-top: 8px;

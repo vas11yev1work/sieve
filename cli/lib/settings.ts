@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chat: { model: 'sonnet', tools: ['Read', 'Grep', 'Glob'] },
   server: { port: 0, open: true },
   map: { mode: 'on-demand', model: 'sonnet' },
+  sharding: { enabled: true, maxFiles: 40, maxLines: 3000, maxShards: 4 },
   ignore: [
     '**/package-lock.json',
     '**/yarn.lock',

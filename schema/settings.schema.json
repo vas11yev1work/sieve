@@ -52,6 +52,10 @@
           "effort": {
             "enum": ["low", "medium", "high", "xhigh", "max"],
             "description": "Reasoning effort of the reviewer's subagent. Unset = Claude Code's default."
+          },
+          "shard": {
+            "type": "boolean",
+            "description": "false = always review the whole change, even when it is split into parts (for whole-PR checks such as ticket coverage)."
           }
         }
       }
@@ -93,6 +97,27 @@
           "default": "on-demand"
         },
         "model": { "type": "string", "description": "haiku | sonnet | opus", "default": "sonnet" }
+      }
+    },
+    "sharding": {
+      "type": "object",
+      "description": "Large PRs: split the changed files into parts of related files (by imports and folders); each reviewer runs once per part.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "maxFiles": { "type": "integer", "minimum": 1, "description": "Changed files per part.", "default": 40 },
+        "maxLines": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Changed lines (added + deleted) per part.",
+          "default": 3000
+        },
+        "maxShards": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Upper bound on parts; each part costs one agent per reviewer.",
+          "default": 4
+        }
       }
     },
     "server": {
