@@ -1,4 +1,8 @@
-import type { InboxJob } from '../../../shared/types';
+import type { InboxJob, InboxRun } from '../../../shared/types';
+import { SEVERITIES } from '../../../shared/types';
+
+/** Dot colour of a run: its worst finding, grey when it found nothing. */
+export const runColor = (r: InboxRun) => `var(--sev-${SEVERITIES.find((s) => r.findings[s] > 0) ?? 'nit'})`;
 
 const share = (job: InboxJob, phase: string) => {
   const list = job.agents.filter((a) => a.phase === phase);

@@ -1,34 +1,81 @@
 import { describe, expect, test } from 'bun:test';
-import { bucketOf, parsePrs, scopeQuery } from '../cli/lib/inbox.ts';
+import { applyInboxState, parsePrs, scopeQuery, turnOf } from '../cli/lib/inbox.ts';
 import { DEFAULT_SETTINGS } from '../cli/lib/settings.ts';
 import { trackJob } from '../server/inbox.ts';
-import type { InboxJob } from '../shared/types.ts';
+import type { InboxJob, InboxRun } from '../shared/types.ts';
 import { progress } from '../ui/src/inbox/track.ts';
 
-describe('bucketOf', () => {
+describe('turnOf', () => {
   const mine = (state: string, onHead: boolean) => ({ state, at: '', onHead });
+  const run = (onHead: boolean, open: number, published = 0) =>
+    ({
+      onHead,
+      status: { open, accepted: 0, rejected: 0 },
+      unpublished: 0,
+      reviews: published ? [{ at: '', count: published }] : [],
+    }) as unknown as InboxRun;
+  const pr = (o: Partial<Parameters<typeof turnOf>[0]>) => ({
+    requested: null,
+    runs: [],
+    decision: null,
+    approvals: 0,
+    ...o,
+  });
+  const turn = (o: Partial<Parameters<typeof turnOf>[0]>) => turnOf(pr(o));
 
-  test('needs you: requested, or new commits after your review', () => {
-    expect(bucketOf({ requested: 'me' })).toBe('review');
-    expect(bucketOf({ requested: 'team' })).toBe('review');
-    expect(bucketOf({ requested: null, myReview: mine('APPROVED', false) })).toBe('review');
-    expect(bucketOf({ requested: null, myReview: mine('COMMENTED', false) })).toBe('review');
-    // personally requested again on the same head
-    expect(bucketOf({ requested: 'me', myReview: mine('COMMENTED', true) })).toBe('review');
-    // your review on the current head was dismissed
-    expect(bucketOf({ requested: null, myReview: mine('DISMISSED', true) })).toBe('review');
+  test('your turn: requested now — first time, again, or via your team', () => {
+    expect(turn({ requested: 'me' })).toEqual({ turn: 'me', why: 'requested' });
+    expect(turn({ requested: 'me', myReview: mine('CHANGES_REQUESTED', false) })).toEqual({
+      turn: 'me',
+      why: 'rerequested',
+    });
+    expect(turn({ requested: 'team' })).toEqual({ turn: 'me', why: 'team' });
   });
 
-  test('hidden: you already reviewed the current head', () => {
-    expect(bucketOf({ requested: null, myReview: mine('APPROVED', true) })).toBeNull();
-    expect(bucketOf({ requested: null, myReview: mine('CHANGES_REQUESTED', true) })).toBeNull();
-    expect(bucketOf({ requested: 'team', myReview: mine('APPROVED', true) })).toBeNull();
-    expect(bucketOf({ requested: null })).toBeNull();
+  test('asked of you but approved by someone else: a group of its own; Sieve findings still come first', () => {
+    expect(turn({ requested: 'me', approvals: 1 })).toEqual({ turn: 'others', why: 'requested' });
+    expect(turn({ requested: 'me', decision: 'APPROVED' })?.turn).toBe('others');
+    expect(turn({ requested: 'team', approvals: 1 })).toEqual({ turn: 'others', why: 'team' });
+    expect(turn({ requested: 'me', approvals: 1, runs: [run(true, 2)] })).toEqual({ turn: 'me', why: 'findings' });
   });
 
-  test('a running review wins', () => {
+  test("new commits without a new request stay the author's turn", () => {
+    expect(turn({ myReview: mine('CHANGES_REQUESTED', false) })).toEqual({ turn: 'author', why: 'changes' });
+    expect(turn({ myReview: mine('COMMENTED', true) })).toEqual({ turn: 'author', why: 'commented' });
+    expect(turn({ myReview: mine('DISMISSED', true) })).toEqual({ turn: 'author', why: 'dismissed' });
+  });
+
+  test('done: you approved, or only your team is asked and it is approved', () => {
+    expect(turn({ myReview: mine('APPROVED', false) })).toEqual({ turn: 'done', why: 'approved' });
+    expect(turn({ requested: 'team', decision: 'APPROVED' })).toEqual({ turn: 'done', why: 'enough' });
+    expect(turn({ requested: 'team', myReview: mine('APPROVED', true) })).toEqual({ turn: 'done', why: 'approved' });
+  });
+
+  test('findings waiting on the current head make it yours; published or older ones do not', () => {
+    expect(turn({ myReview: mine('APPROVED', true), runs: [run(true, 2)] })).toEqual({ turn: 'me', why: 'findings' });
+    expect(turn({ myReview: mine('APPROVED', true), runs: [run(true, 2, 1)] })?.turn).toBe('done');
+    expect(turn({ myReview: mine('APPROVED', false), runs: [run(false, 2)] })?.turn).toBe('done');
+  });
+
+  test('a running review wins; nothing to show without a request or a review', () => {
     const job = { state: 'running' } as InboxJob;
-    expect(bucketOf({ requested: null, myReview: mine('APPROVED', true), job })).toBe('reviewing');
+    expect(turn({ myReview: mine('APPROVED', true), job })).toEqual({ turn: 'sieve', why: 'job' });
+    expect(turn({})).toBeNull();
+  });
+});
+
+describe('applyInboxState', () => {
+  const prs = [
+    { url: 'a', headSha: 'h1' },
+    { url: 'b', headSha: 'h2' },
+    { url: 'c', headSha: 'h3' },
+    { url: 'd', headSha: 'h4' },
+  ];
+  test('snoozed until the head moves', () => {
+    const r = applyInboxState(prs, { snoozed: { a: 'h1', b: 'old' } });
+    expect(r.shown.map((p) => p.url)).toEqual(['b', 'c', 'd']);
+    expect(r.snoozed).toEqual(['a']);
+    expect(r.expired).toEqual(['b']);
   });
 });
 
@@ -60,6 +107,13 @@ describe('parsePrs', () => {
           nodes: [
             pr('u1', {
               reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'User', login: 'Me' } }] },
+              timelineItems: {
+                nodes: [
+                  { createdAt: '2026-01-02T00:00:00Z', requestedReviewer: { __typename: 'User', login: 'me' } },
+                  { createdAt: '2026-01-03T00:00:00Z', requestedReviewer: { __typename: 'User', login: 'bob' } },
+                  { createdAt: '2026-01-01T00:00:00Z', requestedReviewer: { __typename: 'User', login: 'me' } },
+                ],
+              },
               reviews: {
                 nodes: [
                   { author: { login: 'bob' }, state: 'APPROVED', commit: { oid: 'head' } },
@@ -91,6 +145,9 @@ describe('parsePrs', () => {
     expect(rows[0]!.myReview).toMatchObject({ state: 'CHANGES_REQUESTED', onHead: false });
     expect(rows[1]!.teams).toEqual(['acme/fe']);
     expect(rows[0]!.threads).toEqual({ total: 2, unresolved: 1 });
+    // your newest request; another reviewer's later one does not count
+    expect(rows[0]!.requestedAt).toBe('2026-01-02T00:00:00Z');
+    expect(rows[2]!.requestedAt).toBeUndefined();
     expect(rows[0]!.ci).toBe('FAILURE');
   });
 });

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /**
- * The "In Sieve" column: one status line with an icon, like the GitHub column next to it.
- * A running review shows a ring of its overall progress and what it is doing right now.
+ * Sieve's part of a row: a running review shows a ring of its overall progress and what it is
+ * doing right now; otherwise one dot per run and what waits on the current commit.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { CircleCheck, CircleX, CircleDashed, History, Network } from 'lucide-vue-next';
+import { CircleX, Network } from 'lucide-vue-next';
 import type { InboxPr } from '../../../shared/types';
 import { SEVERITIES } from '../../../shared/types';
 import { t } from '../i18n';
-import { progress, stageCount } from './track';
+import { progress, runColor, stageCount } from './track';
 
 const props = defineProps<{ pr: InboxPr; ahead: number }>();
 const emit = defineEmits<{ dismiss: [] }>();
@@ -19,7 +19,6 @@ const running = computed(() => job.value?.state === 'running');
 const queued = computed(() => job.value?.state === 'queued');
 const failed = computed(() => job.value?.state === 'error');
 const cur = computed(() => props.pr.runs.find((r) => r.onHead));
-const last = computed(() => props.pr.runs[0]);
 const total = computed(() => (cur.value ? SEVERITIES.reduce((n, s) => n + cur.value!.findings[s], 0) : 0));
 const published = computed(() => cur.value?.reviews.reduce((n, r) => n + r.count, 0) || 0);
 
@@ -84,34 +83,29 @@ const elapsed = computed(() => {
       </p>
     </template>
 
-    <template v-else-if="cur">
-      <div class="line">
-        <CircleCheck :size="16" class="ok" />
-        <span class="main">{{ total ? i.findings(total) : i.noFindings }}</span>
-        <span v-if="total" class="sevs">
-          <template v-for="s in SEVERITIES" :key="s">
-            <span v-if="cur.findings[s]" class="sevn" :class="s" :title="s">{{ cur.findings[s] }}</span>
-          </template>
-        </span>
-      </div>
-      <p class="sub">
+    <!-- One dot per run, oldest first: filled = on the current commit, ring = older -->
+    <div v-else class="line wrap">
+      <span v-if="pr.runs.length" class="dots" aria-hidden="true">
+        <i
+          v-for="r in [...pr.runs].reverse()"
+          :key="r.runDir"
+          :class="{ ring: !r.onHead }"
+          :style="{ '--c': runColor(r) }"
+        />
+      </span>
+      <span class="main" :class="{ muted: !pr.runs.length }">
+        {{ pr.runs.length ? i.runs(pr.runs.length) : i.notReviewed }}
+      </span>
+      <template v-if="cur">
         <a v-if="cur.reviews.length" :href="cur.reviews.at(-1)!.url" target="_blank" rel="noopener">
           {{ i.published(published) }}
         </a>
         <span v-else-if="cur.unpublished" class="accent">{{ i.toPublish(cur.unpublished) }}</span>
-        <span v-else-if="cur.status.open">{{ i.toTriage(cur.status.open) }}</span>
+        <span v-else-if="cur.status.open" class="accent">{{ i.toTriage(cur.status.open) }}</span>
+        <span v-else-if="!total" class="muted">{{ i.noFindings }}</span>
         <span v-if="cur.map" class="muted map"><Network :size="12" /> {{ i.mapReady }}</span>
-      </p>
-    </template>
-
-    <div v-else-if="last" class="line muted">
-      <History :size="16" />
-      <span class="main">{{ i.olderRun }}</span>
-    </div>
-
-    <div v-else class="line muted">
-      <CircleDashed :size="16" />
-      <span class="main">{{ i.notReviewed }}</span>
+      </template>
+      <span v-else-if="pr.runs.length" class="old">{{ i.olderRun }}</span>
     </div>
   </div>
 </template>
@@ -134,8 +128,32 @@ const elapsed = computed(() => {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.muted .main {
+.muted .main,
+.main.muted {
   font-weight: 400;
+}
+.wrap {
+  flex-wrap: wrap;
+  column-gap: 10px;
+  row-gap: 2px;
+}
+.dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  background: var(--c);
+}
+.dots i.ring {
+  background: none;
+  border: 2px solid var(--c);
+}
+.old {
+  color: var(--sev-major);
 }
 .time {
   margin-left: auto;
@@ -170,13 +188,6 @@ const elapsed = computed(() => {
   stroke: var(--accent);
   stroke-linecap: round;
   transition: stroke-dashoffset 0.6s ease-out;
-}
-.sevs {
-  display: inline-flex;
-  gap: 8px;
-}
-.ok {
-  color: var(--ok);
 }
 .bad {
   color: var(--danger);
