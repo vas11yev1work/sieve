@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { applyInboxState, parsePrs, scopeQuery, turnOf } from '../cli/lib/inbox.ts';
 import { DEFAULT_SETTINGS } from '../cli/lib/settings.ts';
-import { trackJob } from '../server/inbox.ts';
+import { runUsage, trackJob } from '../server/inbox.ts';
 import type { InboxJob, InboxRun } from '../shared/types.ts';
 import { progress } from '../ui/src/inbox/track.ts';
 
@@ -193,6 +193,57 @@ describe('trackJob', () => {
     expect(job.agents.at(-1)).toMatchObject({ name: 'f1', phase: 'validate' });
     use('b3', 'Bash', { command: 'bun "/s/cli/sieve.ts" finalize "/r"' });
     expect(job.phase).toBe('finalize');
+  });
+
+  test('background agents: done and usage come with the task notification', () => {
+    const job: InboxJob = { url: 'u', state: 'running', phase: 'prepare', agents: [], queuedAt: '' };
+    const at = (s: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, s)).toISOString();
+    job.startedAt = at(0);
+    job.phaseAt = { prepare: at(0) };
+    trackJob(
+      job,
+      {
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: { content: [{ type: 'tool_use', id: 't1', name: 'Agent', input: { description: 'Sieve: rules' } }] },
+      },
+      at(10),
+    );
+    trackJob(job, {
+      type: 'user',
+      parent_tool_use_id: null,
+      tool_use_result: { status: 'async_launched' },
+      message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'launched' }] },
+    });
+    expect(job.agents[0]!.done).toBe(false);
+    trackJob(job, {
+      type: 'system',
+      subtype: 'task_notification',
+      tool_use_id: 't1',
+      usage: { total_tokens: 1200, tool_uses: 7, duration_ms: 30000 },
+    });
+    expect(job.agents[0]).toMatchObject({ done: true, usage: { tokens: 1200, toolUses: 7, durationMs: 30000 } });
+
+    job.finishedAt = at(60);
+    const u = runUsage(
+      job,
+      {
+        total_cost_usd: 1.5,
+        modelUsage: {
+          a: { inputTokens: 1, outputTokens: 2, cacheReadInputTokens: 3, cacheCreationInputTokens: 4 },
+          b: { inputTokens: 10, outputTokens: 20, cacheReadInputTokens: 30, cacheCreationInputTokens: 40 },
+        },
+      },
+      500,
+    );
+    expect(u).toEqual({
+      durationMs: 60000,
+      phases: { prepare: 10000, review: 50000 },
+      orchestrator: 500,
+      agents: [{ name: 'rules', phase: 'review', tokens: 1200, toolUses: 7, durationMs: 30000 }],
+      total: { input: 11, output: 22, cacheRead: 33, cacheWrite: 44 },
+      costUsd: 1.5,
+    });
   });
 });
 

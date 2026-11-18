@@ -31,6 +31,8 @@ export const paths = (runDir: string) => ({
   worktree: join(runDir, 'wt'),
   server: join(runDir, 'server.json'),
   prComments: join(runDir, 'pr-comments.json'),
+  /** Time and tokens of a run started from the inbox. */
+  usage: join(runDir, 'usage.json'),
   /** Files of each part of a large change (`[]` = reviewed whole). */
   shards: join(runDir, 'shards.json'),
   shardPatch: (n: number) => join(runDir, `diff-${n}.patch`),

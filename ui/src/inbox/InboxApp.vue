@@ -22,7 +22,7 @@ const stopped = ref(false);
 /** PR whose "Review" was clicked: the reviewer picker is open for it. */
 const picking = ref<InboxPr | null>(null);
 
-const ORDER: InboxTurn[] = ['me', 'sieve', 'others', 'author', 'done'];
+const ORDER: InboxTurn[] = ['me', 'sieve', 'author', 'others', 'done'];
 
 /** A view setting kept in this browser; storage can be blocked, then it just isn't kept. */
 function stored<T>(key: string, fallback: T): Ref<T> {
@@ -44,7 +44,10 @@ function stored<T>(key: string, fallback: T): Ref<T> {
 }
 /** Repos to show, "owner/repo"; empty = all. */
 const repos = stored<string[]>('sieve.inbox.repos', []);
-const hideApproved = stored('sieve.inbox.hideApproved', true);
+/** Groups folded to their heading; each is toggled on its own. */
+const hidden = stored<InboxTurn[]>('sieve.inbox.hidden', ['others', 'done']);
+const toggleGroup = (id: InboxTurn) =>
+  (hidden.value = hidden.value.includes(id) ? hidden.value.filter((x) => x !== id) : [...hidden.value, id]);
 /** The one row whose details are open. */
 const expanded = ref('');
 const toast = ref<{ text: string; undo: () => void } | null>(null);
@@ -100,7 +103,7 @@ const groups = computed(() =>
   ORDER.map((id) => ({
     id,
     prs: shown.value.filter((p) => p.turn === id).sort(byNeed),
-    collapsed: (id === 'done' || id === 'others') && hideApproved.value,
+    collapsed: hidden.value.includes(id),
   })).filter((g) => g.prs.length),
 );
 
@@ -224,18 +227,13 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
       <div class="brand">
         <img src="/logo.svg" width="24" height="24" alt="" />
         <span>Sieve</span>
+        <h1>Inbox</h1>
       </div>
-      <h1>{{ t.inbox.title }}</h1>
-      <nav v-if="data?.enabled && total" class="jump" aria-label="Groups">
-        <a v-for="g in groups" :key="g.id" :href="`#${g.id}`" :class="`b-${g.id}`">
-          {{ t.inbox.groups[g.id]![0] }} <span class="n">{{ counts[g.id] }}</span>
-        </a>
-      </nav>
       <span class="grow" />
       <span v-if="data?.viewer" class="muted who">@{{ data.viewer }}</span>
       <span class="muted updated">{{ updated }}</span>
-      <button class="ghost" :disabled="refreshing" :title="updated" @click="load(true)">
-        <RefreshCw :size="14" :class="{ spin: refreshing }" /> {{ t.inbox.refresh }}
+      <button class="ghost" :disabled="refreshing" :title="updated" :aria-label="t.inbox.refresh" @click="load(true)">
+        <RefreshCw :size="14" :class="{ spin: refreshing }" /> <span class="label">{{ t.inbox.refresh }}</span>
       </button>
       <LanguagePicker
         v-if="data"
@@ -244,8 +242,15 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
         :save-label="t.inbox.saveDefault"
         @apply="setLanguages"
       />
-      <button class="ghost" :title="t.inbox.stop" @click="stop"><Power :size="15" /> {{ t.inbox.stop }}</button>
+      <button class="ghost" :title="t.inbox.stop" @click="stop">
+        <Power :size="15" /> <span class="label">{{ t.inbox.stop }}</span>
+      </button>
     </header>
+    <nav v-if="data?.enabled && groups.length" class="jump" aria-label="Groups">
+      <a v-for="g in groups" :key="g.id" :href="`#${g.id}`" :class="`b-${g.id}`">
+        <i class="dot" aria-hidden="true" />{{ t.inbox.groups[g.id]![0] }} <span class="n">{{ counts[g.id] }}</span>
+      </a>
+    </nav>
 
     <main class="main">
       <div v-if="data && !data.enabled" class="state">
@@ -271,10 +276,6 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
             <input v-model="filter" type="text" :placeholder="t.inbox.filter" :aria-label="t.inbox.filter" />
           </label>
           <RepoFilter v-model="repos" :counts="repoCounts" />
-          <label class="check">
-            <input v-model="hideApproved" type="checkbox" />
-            {{ t.inbox.hideApproved }}
-          </label>
           <span
             v-if="data?.query"
             class="query"
@@ -297,7 +298,9 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
             <h2>{{ t.inbox.groups[g.id]![0] }}</h2>
             <span class="count">{{ g.prs.length }}</span>
             <span class="hint muted">· {{ t.inbox.groups[g.id]![1] }}</span>
-            <button v-if="g.collapsed" class="ghost show" @click="hideApproved = false">{{ t.inbox.show }}</button>
+            <button class="ghost show" :aria-expanded="!g.collapsed" @click="toggleGroup(g.id)">
+              {{ g.collapsed ? t.inbox.show : t.inbox.hide }}
+            </button>
           </div>
           <div v-if="!g.collapsed" class="list">
             <InboxRow
@@ -370,35 +373,47 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
   letter-spacing: -0.01em;
 }
 h1 {
-  margin: 0;
-  padding-left: 16px;
-  border-left: 1px solid var(--border);
-  font-size: 15px;
-  font-weight: 600;
+  margin: 0 0 0 -3px;
+  font: inherit;
+  color: var(--accent);
+}
+.bar button {
+  flex: none;
+  white-space: nowrap;
 }
 .jump {
+  /* Its own strip, so all groups fit at any width; scrolls sideways on a phone. */
+  flex: none;
   display: flex;
   gap: 2px;
-  padding: 3px;
-  background: var(--panel-2);
-  border-radius: 10px;
-  min-width: 0;
-  overflow: hidden;
+  padding: 6px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.jump::-webkit-scrollbar {
+  display: none;
 }
 .jump a {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+  gap: 7px;
+  padding: 4px 10px;
   border-radius: 7px;
   color: var(--muted);
   font-size: 13px;
   white-space: nowrap;
 }
 .jump a:hover {
-  background: var(--panel);
+  background: var(--panel-2);
   color: var(--text);
   text-decoration: none;
+}
+.jump .dot {
+  width: 8px;
+  height: 8px;
 }
 .n {
   font-size: 11.5px;
@@ -407,13 +422,6 @@ h1 {
   color: var(--muted);
   border-radius: 999px;
   padding: 0 7px;
-}
-.jump .n {
-  background: var(--panel);
-}
-.jump a .n {
-  background: var(--accent);
-  color: var(--accent-text);
 }
 .grow {
   flex: 1;
@@ -457,14 +465,6 @@ h1 {
   gap: 10px 16px;
   margin-bottom: 22px;
 }
-.check {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13.5px;
-  white-space: nowrap;
-  cursor: pointer;
-}
 .search {
   flex: 1 1 280px;
   max-width: 420px;
@@ -503,19 +503,19 @@ h1 {
 .group {
   margin-bottom: 28px;
 }
-.group {
+.b-me {
   --dot: var(--accent);
 }
-.group.b-sieve {
+.b-sieve {
   --dot: #2f7ae5;
 }
-.group.b-others {
+.b-others {
   --dot: color-mix(in srgb, var(--ok) 45%, var(--border));
 }
-.group.b-author {
+.b-author {
   --dot: var(--sev-major);
 }
-.group.b-done {
+.b-done {
   --dot: var(--ok);
 }
 .ghead {
@@ -530,6 +530,12 @@ h1 {
   height: 10px;
   border-radius: 50%;
   background: var(--dot);
+}
+.ghead h2,
+.count,
+.show {
+  flex: none;
+  white-space: nowrap;
 }
 .ghead h2 {
   margin: 0;
@@ -628,21 +634,15 @@ h1 {
 .state pre {
   margin: 4px 0 0;
 }
-/* Room for the group links first; the time is also in the Refresh button's tooltip. */
-@media (max-width: 1360px) {
-  .who,
-  .updated {
-    display: none;
-  }
-}
 @media (prefers-color-scheme: dark) {
-  .group.b-sieve {
+  .b-sieve {
     --dot: #5b9bff;
   }
 }
+/* The time is also in the Refresh button's tooltip. */
 @media (max-width: 960px) {
-  .jump,
-  .who {
+  .who,
+  .updated {
     display: none;
   }
 }
@@ -650,12 +650,13 @@ h1 {
   .main {
     padding: 16px 12px 48px;
   }
-  .updated,
-  .hint {
+  .hint,
+  .bar :deep(.label) {
     display: none;
   }
   .bar {
-    gap: 10px;
+    gap: 6px;
+    padding: 8px 12px;
   }
 }
 </style>

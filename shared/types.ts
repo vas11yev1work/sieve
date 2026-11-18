@@ -232,6 +232,28 @@ export interface InboxRun {
   map: boolean;
   /** URL of its UI server when one is running. */
   url?: string;
+  /** Time and tokens; only runs started from the inbox have them. */
+  usage?: RunUsage;
+}
+
+/** What Claude Code reports for one agent when it finishes; tokens = its context at the end. */
+export interface AgentUsage {
+  tokens: number;
+  toolUses: number;
+  durationMs: number;
+}
+
+/** usage.json of a run started from the inbox. */
+export interface RunUsage {
+  durationMs: number;
+  /** How long each stage of the pipeline took. */
+  phases: Partial<Record<'prepare' | 'review' | 'validate' | 'finalize', number>>;
+  /** The orchestrator's context at the end, counted like an agent's. */
+  orchestrator: number;
+  agents: (AgentUsage & { name: string; phase: InboxAgent['phase'] })[];
+  /** The whole run, every model and agent: tokens as Claude Code bills them. */
+  total: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  costUsd?: number;
 }
 
 export interface InboxAgent {
@@ -239,6 +261,7 @@ export interface InboxAgent {
   name: string;
   phase: 'review' | 'validate' | 'map';
   done: boolean;
+  usage?: AgentUsage;
 }
 
 export interface InboxJob {
@@ -249,6 +272,8 @@ export interface InboxJob {
   queuedAt: string;
   startedAt?: string;
   finishedAt?: string;
+  /** When each phase started. */
+  phaseAt?: Partial<Record<InboxJob['phase'], string>>;
   error?: string;
   runDir?: string;
   log?: string;

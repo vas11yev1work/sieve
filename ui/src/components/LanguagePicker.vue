@@ -34,7 +34,10 @@ function apply() {
 <template>
   <div class="lang-wrap">
     <button class="ghost" :title="t.languageHint" :aria-expanded="open" @click="toggle">
-      <Languages :size="15" /> <span class="mono">{{ report }}</span> / <span class="mono">{{ comment }}</span>
+      <Languages :size="15" />
+      <span class="label"
+        ><span class="mono">{{ report }}</span> / <span class="mono">{{ comment }}</span></span
+      >
     </button>
     <div v-if="open" class="popover" @keydown.esc="open = false">
       <div class="muted hint">{{ t.languageHint }}</div>
@@ -61,6 +64,10 @@ function apply() {
 <style scoped>
 .lang-wrap {
   position: relative;
+  flex: none;
+}
+.lang-wrap > button {
+  white-space: nowrap;
 }
 .popover {
   position: absolute;

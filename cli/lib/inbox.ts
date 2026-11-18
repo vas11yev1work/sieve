@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import type {
   Finding,
   FindingStatus,
+  RunUsage,
   InboxPr,
   InboxRun,
   InboxSettings,
@@ -220,6 +221,7 @@ export function summarizeRun(runDir: string, headSha: string): InboxRun | null {
     reviews: state.reviews || [],
     map: existsSync(p.map),
     url: pidAlive(server.pid) ? server.url : undefined,
+    usage: existsSync(p.usage) ? readJson<RunUsage>(p.usage) : undefined,
   };
 }
 

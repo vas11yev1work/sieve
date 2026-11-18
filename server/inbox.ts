@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import type { InboxData, InboxJob, InboxPr, InboxReviewer, Settings } from '../shared/types.ts';
+import type { InboxData, InboxJob, InboxPr, InboxReviewer, RunUsage, Settings } from '../shared/types.ts';
 import { loadSettings, SIEVE_HOME } from '../cli/lib/settings.ts';
 import { allReviewers, loadReviewers } from '../cli/lib/reviewers.ts';
 import {
@@ -85,12 +85,21 @@ const PHASES: [RegExp, InboxJob['phase']][] = [
 ];
 
 /**
- * Follow the orchestrator's stream-json: its Bash calls give the phase, its Task calls the agents.
- * Events of subagents (parent_tool_use_id set) are ignored.
+ * Follow the orchestrator's stream-json: its Bash calls give the phase, its Task calls the agents,
+ * task notifications what each agent took. Events of subagents (parent_tool_use_id set) are ignored.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped claude stream-json events
-export function trackJob(job: InboxJob, ev: any) {
+export function trackJob(job: InboxJob, ev: any, now = new Date().toISOString()) {
   if (ev.parent_tool_use_id) return;
+  const was = job.phase;
+  if (ev.type === 'system' && ev.subtype === 'task_notification') {
+    const a = job.agents.find((x) => x.id === ev.tool_use_id);
+    if (a) {
+      a.done = true;
+      const u = ev.usage || {};
+      a.usage = { tokens: u.total_tokens || 0, toolUses: u.tool_uses || 0, durationMs: u.duration_ms || 0 };
+    }
+  }
   for (const c of ev.message?.content || []) {
     if (ev.type === 'assistant' && c.type === 'tool_use') {
       const name = String(c.name);
@@ -105,12 +114,48 @@ export function trackJob(job: InboxJob, ev: any) {
       }
     } else if (ev.type === 'user' && c.type === 'tool_result') {
       const a = job.agents.find((x) => x.id === c.tool_use_id);
-      if (a) a.done = true;
+      const r = ev.tool_use_result;
+      // An agent started in the background only says it started; it reports in a task notification.
+      if (a && r?.status !== 'async_launched') {
+        a.done = true;
+        if (r?.totalTokens != null)
+          a.usage = { tokens: r.totalTokens, toolUses: r.totalToolUseCount || 0, durationMs: r.totalDurationMs || 0 };
+      }
       const text = typeof c.content === 'string' ? c.content : JSON.stringify(c.content || '');
       const m = text.match(/"runDir":\s*"((?:[^"\\]|\\.)+)"/);
       if (m && !job.runDir) job.runDir = JSON.parse(`"${m[1]}"`);
     }
   }
+  if (job.phase !== was) (job.phaseAt ??= {})[job.phase] ??= now;
+}
+
+/** A finished job + its last `result` event (totals over the whole session) → usage.json. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped claude stream-json events
+export function runUsage(job: InboxJob, result: any, orchestrator: number): RunUsage {
+  const end = job.finishedAt!;
+  const marks = Object.entries(job.phaseAt || {})
+    .filter(([p]) => p !== 'queued' && p !== 'done')
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  const phases: RunUsage['phases'] = {};
+  marks.forEach(([p, at], k) => {
+    phases[p as keyof RunUsage['phases']] = Date.parse(marks[k + 1]?.[1] ?? end) - Date.parse(at);
+  });
+  const total = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped claude stream-json events
+  for (const m of Object.values<any>(result?.modelUsage || {})) {
+    total.input += m.inputTokens || 0;
+    total.output += m.outputTokens || 0;
+    total.cacheRead += m.cacheReadInputTokens || 0;
+    total.cacheWrite += m.cacheCreationInputTokens || 0;
+  }
+  return {
+    durationMs: Date.parse(end) - Date.parse(job.startedAt!),
+    phases,
+    orchestrator,
+    agents: job.agents.flatMap((a) => (a.usage ? [{ name: a.name, phase: a.phase, ...a.usage }] : [])),
+    total,
+    costUsd: result?.total_cost_usd,
+  };
 }
 
 export interface InboxServerOptions {
@@ -159,6 +204,7 @@ export function createInboxApp(o: InboxServerOptions) {
     job.state = 'running';
     job.phase = 'prepare';
     job.startedAt = new Date().toISOString();
+    job.phaseAt = { prepare: job.startedAt };
     const ac = new AbortController();
     aborts.set(job.url, ac);
 
@@ -169,6 +215,9 @@ export function createInboxApp(o: InboxServerOptions) {
     mkdirSync(join(SIEVE_HOME, 'logs'), { recursive: true });
     job.log = join(SIEVE_HOME, 'logs', `inbox-${pr ? `${pr.owner}-${pr.repo}-${pr.number}` : Date.now()}.jsonl`);
     const only = picks.get(job.url);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped claude stream-json events
+    let result: any;
+    let orchestrator = 0;
     try {
       const res = await runClaude({
         cwd,
@@ -190,6 +239,16 @@ export function createInboxApp(o: InboxServerOptions) {
         env: { SIEVE_HEADLESS: '1' },
         onEvent: (ev) => {
           trackJob(job, ev);
+          if (!ev.parent_tool_use_id) {
+            if (ev.type === 'result') result = ev;
+            const u = ev.type === 'stream_event' && ev.event?.type === 'message_delta' ? ev.event.usage : null;
+            if (u)
+              orchestrator =
+                (u.input_tokens || 0) +
+                (u.cache_read_input_tokens || 0) +
+                (u.cache_creation_input_tokens || 0) +
+                (u.output_tokens || 0);
+          }
           appendFileSync(job.log!, JSON.stringify(ev) + '\n');
         },
         signal: ac.signal,
@@ -198,11 +257,13 @@ export function createInboxApp(o: InboxServerOptions) {
         throw new Error(res.text.slice(-600) || 'The review ended without results.');
       job.state = 'done';
       job.phase = 'done';
+      job.finishedAt = new Date().toISOString();
+      writeJson(paths(job.runDir).usage, runUsage(job, result, orchestrator));
     } catch (e) {
       job.state = ac.signal.aborted ? 'cancelled' : 'error';
       if (!ac.signal.aborted) job.error = (e as Error).message;
     } finally {
-      job.finishedAt = new Date().toISOString();
+      job.finishedAt ??= new Date().toISOString();
       aborts.delete(job.url);
       force.delete(job.url);
       picks.delete(job.url);

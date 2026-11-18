@@ -127,8 +127,8 @@ PRs are grouped by whose move it is:
 
 - **Your turn** — your review is requested (for the first time, again after your review, or via your team), or Sieve findings on the current commit wait for you to go through or publish.
 - **Sieve is on it** — a Sieve review is running or queued.
-- **Approved by others** — your review is still requested, but someone else approved the current commit, or GitHub already counts the PR as approved.
 - **Waiting for the author** — the PR has merge conflicts (even if your review is requested or findings wait), or you requested changes or commented and your review was not requested again, even if new commits came.
+- **Approved by others** — your review is still requested, but someone else approved the current commit, or GitHub already counts the PR as approved.
 - **Done** — you approved, or only your team was asked and GitHub counts the PR as approved.
 
 Within a group, Sieve findings and repeated requests come first, then requests to you before your team's, PRs nobody approved before approved ones, then the longest wait. Merged and closed PRs are not listed.
@@ -140,7 +140,9 @@ Each row shows:
 - **Sieve** — a dot per run (filled: on the current commit, ring: on an older one, coloured by the worst finding) and what is left on the current commit: to go through, ready to publish, published, map built. While a review runs: a progress ring, what it is doing ("Reviewers 2 of 4", "Checked 6 of 14 findings") and the elapsed time.
 - **Action** — Review / Open / Retry / Cancel, and **Details**: every run with its commit, findings and how far it was gone through, **Review again**, and **Snooze** — the PR leaves the page until its next commit (kept in `~/.sieve/inbox-state.json`).
 
-Above the list: a search, a repository filter and **Hide approved**, which collapses Approved by others and Done; the filter and the checkbox are kept in the browser. Below it: how many PRs the repository filter and snoozes leave out, with a link to bring them back.
+Runs started from the inbox also show how long they took, their tokens and the API-price cost, and open into the time of each stage and a table of tokens and time per process: the orchestrator, each reviewer (its parts added up), the map, the validators together. It is saved as `usage.json` in the run folder; runs started from Claude Code have none.
+
+Above the list: a search and a repository filter, kept in the browser. Each group has its own **Hide** / **Show** (also kept; Approved by others and Done start hidden), and the tabs under the header jump to a group. Below it: how many PRs the repository filter and snoozes leave out, with a link to bring them back.
 
 The header has **Stop** (stops the inbox server, cancelling running and queued reviews) and the same language button as the review page; there "save as default" writes `~/.sieve/settings.json`, since the inbox spans projects.
 

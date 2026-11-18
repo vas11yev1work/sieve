@@ -27,6 +27,20 @@ export function since(iso: string, now = Date.now()): string {
   );
 }
 
+/** How long something took, short: "45 s", "6 min", "1 h 5 min". */
+export function dur(ms: number): string {
+  const f = (n: number, unit: string) =>
+    new Intl.NumberFormat(uiLang.value, { style: 'unit', unit, unitDisplay: 'short' }).format(n);
+  const s = Math.round(ms / 1000);
+  if (s < 60) return f(s, 'second');
+  const m = Math.round(s / 60);
+  return m < 60 ? f(m, 'minute') : `${f(Math.floor(m / 60), 'hour')} ${f(m % 60, 'minute')}`;
+}
+
+/** "174K", "93,4 млн" — token counts in the UI language. */
+export const tok = (n: number) =>
+  new Intl.NumberFormat(uiLang.value, { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+
 /** "17 Nov, 14:12" in the UI language. */
 export function when(iso: string): string {
   return new Date(iso).toLocaleString(uiLang.value, {

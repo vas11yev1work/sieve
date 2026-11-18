@@ -16,12 +16,12 @@ import {
   ChevronDown,
   Clock,
 } from 'lucide-vue-next';
-import type { InboxPr, InboxRun } from '../../../shared/types';
+import type { InboxPr, InboxRun, RunUsage } from '../../../shared/types';
 import { SEVERITIES } from '../../../shared/types';
 import { t } from '../i18n';
 import Markdown from '../components/Markdown.vue';
 import SieveStatus from './SieveStatus.vue';
-import { ago, since, waitFrom, when } from './ago';
+import { ago, dur, since, tok, waitFrom, when } from './ago';
 import { runColor } from './track';
 
 const props = defineProps<{ pr: InboxPr; ahead: number; opening: boolean; expanded: boolean }>();
@@ -90,6 +90,28 @@ const wait = computed(() => {
   if (props.pr.turn === 'author') return { text: i.value.waitAuthor(d), late: false };
   return { text: i.value.waitYou(d), late: props.pr.turn === 'me' && Date.now() - Date.parse(from) >= 86_400_000 };
 });
+
+const totalOf = (u: RunUsage) => u.total.input + u.total.output + u.total.cacheRead + u.total.cacheWrite;
+
+/** One row per process: the orchestrator, each reviewer with all its parts, the map, all validators together. */
+function usageRows(u: RunUsage) {
+  const rows = new Map<string, { name: string; n: number; tokens: number; durationMs: number }>();
+  rows.set('', { name: i.value.orchestrator, n: 1, tokens: u.orchestrator, durationMs: u.durationMs });
+  for (const a of u.agents) {
+    const name =
+      a.phase === 'validate'
+        ? i.value.stage.validate
+        : a.phase === 'map'
+          ? i.value.mapAgent
+          : a.name.replace(/\s+\d+\/\d+$/, '');
+    let r = rows.get(name);
+    if (!r) rows.set(name, (r = { name, n: 0, tokens: 0, durationMs: 0 }));
+    r.n++;
+    r.tokens += a.tokens;
+    r.durationMs += a.durationMs;
+  }
+  return [...rows.values()];
+}
 
 function summary(r: InboxRun) {
   const n = r.status.open + r.status.accepted + r.status.rejected;
@@ -183,6 +205,45 @@ function summary(r: InboxRun) {
                 </template>
                 <span>{{ summary(r) }}</span>
               </div>
+              <details v-if="r.usage" class="usage">
+                <summary>
+                  <Clock :size="12" /> {{ dur(r.usage.durationMs) }} · {{ i.usageTokens(tok(totalOf(r.usage))) }}
+                  <template v-if="r.usage.costUsd"> · ${{ r.usage.costUsd.toFixed(2) }}</template>
+                </summary>
+                <div class="stages">
+                  <span v-for="(ms, s) in r.usage.phases" :key="s">{{ i.stage[s] }} {{ dur(ms!) }}</span>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{{ i.usageProcess }}</th>
+                      <th>{{ i.usageTokensCol }}</th>
+                      <th>{{ i.usageTime }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in usageRows(r.usage)" :key="row.name">
+                      <td>
+                        {{ row.name }}<span v-if="row.n > 1" class="muted"> ×{{ row.n }}</span>
+                      </td>
+                      <td>{{ tok(row.tokens) }}</td>
+                      <td>{{ dur(row.durationMs) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p class="muted">
+                  {{ i.usageTotal }}:
+                  {{
+                    i.usageSplit(
+                      tok(r.usage.total.input),
+                      tok(r.usage.total.output),
+                      tok(r.usage.total.cacheRead),
+                      tok(r.usage.total.cacheWrite),
+                    )
+                  }}
+                </p>
+                <p class="muted">{{ i.usageHint }}</p>
+              </details>
             </div>
             <a v-if="r.url" :href="r.url" target="_blank" rel="noopener" class="btn">{{ i.open }}</a>
             <button v-else :disabled="opening" @click="emit('open', r.runDir)">{{ i.open }}</button>
@@ -493,6 +554,9 @@ button.go:hover:not(:disabled) {
   border-radius: 10px;
   background: var(--panel);
 }
+.run:has(.usage[open]) {
+  align-items: flex-start;
+}
 .run > .btn,
 .run > button {
   flex: none;
@@ -505,6 +569,50 @@ button.go:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.usage {
+  font-size: 12.5px;
+}
+.usage summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.usage summary:hover {
+  color: var(--text);
+}
+.stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 6px;
+}
+.usage table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.usage th,
+.usage td {
+  padding: 3px 8px 3px 0;
+  text-align: right;
+  white-space: nowrap;
+}
+.usage th:first-child,
+.usage td:first-child {
+  text-align: left;
+  white-space: normal;
+}
+.usage th {
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.usage p {
+  margin: 6px 0 0;
 }
 .run-head {
   display: flex;
