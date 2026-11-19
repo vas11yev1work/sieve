@@ -105,6 +105,16 @@ export function createApp(o: ServerOptions) {
 
   const busy = new Set<string>();
 
+  /** Your own change — a local run, or a PR written by the gh user: it opens in the simple view. */
+  let own: boolean | undefined;
+  const isOwn = () => {
+    if (own === undefined) {
+      const r = meta.mode === 'local' || !has('gh') ? null : sh(['gh', 'api', 'user', '--jq', '.login']);
+      own = meta.mode === 'local' || (!!r?.ok && r.stdout.trim().toLowerCase() === meta.author?.toLowerCase());
+    }
+    return own;
+  };
+
   const settings = (): Settings => {
     const s = loadSettings(meta.repoRoot, meta.overrides);
     if (state.settings?.reportLanguage) s.reportLanguage = state.settings.reportLanguage;
@@ -258,6 +268,7 @@ export function createApp(o: ServerOptions) {
         isDraft: meta.isDraft,
         state: meta.state,
         changedFiles: meta.changedFiles.length,
+        own: isOwn(),
       },
       settings: { reportLanguage: s.reportLanguage, commentLanguage: s.commentLanguage, mapMode: s.map.mode },
       findings,

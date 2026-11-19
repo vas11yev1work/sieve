@@ -99,12 +99,28 @@ const repoCounts = computed(() => {
   return c;
 });
 
+/** PRs to review, or your own: two tabs, kept in this browser. */
+const tab = stored<'review' | 'mine'>('sieve.inbox.tab', 'review');
+const isMine = (p: InboxPr) => p.turn === 'mine';
+const tabCount = computed(() => ({
+  review: shown.value.filter((p) => !isMine(p) && p.turn !== 'snoozed').length,
+  mine: shown.value.filter(isMine).length,
+}));
+
 const groups = computed(() =>
-  ORDER.map((id) => ({
-    id,
-    prs: shown.value.filter((p) => p.turn === id).sort(byNeed),
-    collapsed: hidden.value.includes(id),
-  })).filter((g) => g.prs.length),
+  tab.value === 'mine'
+    ? [
+        {
+          id: 'mine' as InboxTurn,
+          prs: shown.value.filter(isMine).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+          collapsed: false,
+        },
+      ].filter((g) => g.prs.length)
+    : ORDER.map((id) => ({
+        id,
+        prs: shown.value.filter((p) => p.turn === id).sort(byNeed),
+        collapsed: hidden.value.includes(id),
+      })).filter((g) => g.prs.length),
 );
 
 /** Jobs started before this one that have not finished — for "Queued, 2 ahead". */
@@ -118,7 +134,7 @@ const queue = computed(() =>
 const ahead = (url: string) => Math.max(0, queue.value.indexOf(url));
 
 const anyActive = computed(() => queue.value.length > 0);
-const total = computed(() => data.value?.prs.length || 0);
+const total = computed(() => (data.value?.prs || []).filter((p) => isMine(p) === (tab.value === 'mine')).length);
 
 async function call(fn: () => Promise<unknown>) {
   try {
@@ -229,6 +245,14 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
         <span>Sieve</span>
         <h1>Inbox</h1>
       </div>
+      <nav v-if="data?.enabled" class="views" :aria-label="t.inbox.tabs">
+        <button class="view" :class="{ active: tab === 'review' }" @click="tab = 'review'">
+          {{ t.inbox.reviewTab }} <span class="n">{{ tabCount.review }}</span>
+        </button>
+        <button class="view" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">
+          {{ t.inbox.mineTab }} <span class="n">{{ tabCount.mine }}</span>
+        </button>
+      </nav>
       <span class="grow" />
       <span v-if="data?.viewer" class="muted who">@{{ data.viewer }}</span>
       <span class="muted updated">{{ updated }}</span>
@@ -246,7 +270,7 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
         <Power :size="15" /> <span class="label">{{ t.inbox.stop }}</span>
       </button>
     </header>
-    <nav v-if="data?.enabled && groups.length" class="jump" aria-label="Groups">
+    <nav v-if="data?.enabled && tab === 'review' && groups.length" class="jump" aria-label="Groups">
       <a v-for="g in groups" :key="g.id" :href="`#${g.id}`" :class="`b-${g.id}`">
         <i class="dot" aria-hidden="true" />{{ t.inbox.groups[g.id]![0] }} <span class="n">{{ counts[g.id] }}</span>
       </a>
@@ -288,7 +312,7 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
 
         <div v-if="!total" class="state">
           <Inbox :size="28" class="muted" />
-          <h2>{{ t.inbox.empty }}</h2>
+          <h2>{{ tab === 'mine' ? t.inbox.emptyMine : t.inbox.empty }}</h2>
         </div>
         <div v-else-if="!groups.length" class="state muted">{{ t.inbox.emptyFiltered }}</div>
 
@@ -298,7 +322,7 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
             <h2>{{ t.inbox.groups[g.id]![0] }}</h2>
             <span class="count">{{ g.prs.length }}</span>
             <span class="hint muted">· {{ t.inbox.groups[g.id]![1] }}</span>
-            <button class="ghost show" :aria-expanded="!g.collapsed" @click="toggleGroup(g.id)">
+            <button v-if="g.id !== 'mine'" class="ghost show" :aria-expanded="!g.collapsed" @click="toggleGroup(g.id)">
               {{ g.collapsed ? t.inbox.show : t.inbox.hide }}
             </button>
           </div>
@@ -423,6 +447,35 @@ h1 {
 .grow {
   flex: 1;
 }
+.views {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--panel-2);
+  border-radius: 10px;
+}
+.view {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+.view.active {
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+.view.active:hover:not(:disabled) {
+  background: var(--panel);
+}
+.view .n {
+  background: transparent;
+  padding: 0 0 0 2px;
+}
 .who,
 .updated {
   font-size: 12.5px;
@@ -517,6 +570,9 @@ h1 {
 }
 .b-snoozed {
   --dot: var(--muted);
+}
+.b-mine {
+  --dot: var(--accent);
 }
 .ghead {
   display: flex;
@@ -655,8 +711,19 @@ h1 {
     display: none;
   }
   .bar {
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 0 6px;
     padding: 8px 12px;
+  }
+  /* Tabs take a row of their own under the brand and the buttons, as wide as they are. */
+  .bar::after {
+    content: '';
+    order: 1;
+    flex-basis: 100%;
+  }
+  .views {
+    order: 2;
+    margin-top: 6px;
   }
 }
 </style>

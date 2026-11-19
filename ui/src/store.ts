@@ -19,6 +19,8 @@ export const store = reactive({
   error: '',
   run: null as RunData | null,
   view: 'review' as View,
+  /** Only the findings and one Copy button: for your own changes. */
+  simple: false,
   tab: 'open' as Tab,
   selected: '' as string,
   /** Reviewers whose findings are hidden from the list (filter in the tabs bar). */
@@ -37,6 +39,7 @@ export function langCode(l: string) {
 export async function load() {
   try {
     store.run = await api.run();
+    store.simple = store.run.meta.own;
     uiLang.value = langCode(store.run.settings.reportLanguage);
     const first = visible.value[0];
     if (first) store.selected = first.id;

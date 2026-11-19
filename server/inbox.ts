@@ -54,7 +54,10 @@ export async function inboxData(
   for (const p of gh?.prs || []) {
     const job = jobs.get(p.url);
     const runs = localRuns(p);
-    const turn = turnOf({ ...p, job, runs });
+    const turn =
+      gh?.viewer && p.author.toLowerCase() === gh.viewer.toLowerCase()
+        ? { turn: 'mine' as const, why: 'mine' as const }
+        : turnOf({ ...p, job, runs });
     if (!turn) continue;
     all.push({ ...p, checkout: checkoutOf(s.inbox, p.owner, p.repo), runs, job, ...turn });
   }

@@ -198,11 +198,12 @@ export interface InboxSettings {
 // ───────────── Inbox ─────────────
 
 /** Whose turn it is: Sieve is reviewing, yours, the author's, or nothing left (approved). */
-/** `others`: your review is still asked for, but someone else already approved. */
-export type InboxTurn = 'sieve' | 'me' | 'others' | 'author' | 'done' | 'snoozed';
+/** `others`: your review is still asked for, but someone else already approved. `mine`: you wrote it. */
+export type InboxTurn = 'sieve' | 'me' | 'others' | 'author' | 'done' | 'snoozed' | 'mine';
 
 /** Why a PR is in its group; the page turns it into the reason line. */
 export type InboxWhy =
+  | 'mine'
   | 'snoozed'
   | 'job'
   | 'findings'

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { applyInboxState, parsePrs, scopeQuery, turnOf } from '../cli/lib/inbox.ts';
+import { applyInboxState, inboxQuery, parsePrs, scopeQuery, turnOf } from '../cli/lib/inbox.ts';
 import { DEFAULT_SETTINGS } from '../cli/lib/settings.ts';
 import { runUsage, trackJob } from '../server/inbox.ts';
 import type { InboxJob, InboxRun } from '../shared/types.ts';
@@ -93,6 +93,13 @@ describe('scopeQuery', () => {
     const s = { ...DEFAULT_SETTINGS.inbox, repos: ['a/b'], owners: ['acme'], excludeRepos: ['acme/old'] };
     expect(scopeQuery(s)).toBe('is:pr is:open archived:false draft:false repo:a/b user:acme -repo:acme/old');
   });
+
+  test('your own PRs are searched with drafts, even when drafts are off', () => {
+    const q = inboxQuery({ ...DEFAULT_SETTINGS.inbox, repos: ['a/b'] });
+    expect(q.mine).toBe('is:pr is:open archived:false repo:a/b author:@me');
+    expect(q.requested).toContain('draft:false');
+    expect(q.query).toContain('mine: search(');
+  });
 });
 
 describe('parsePrs', () => {
@@ -141,6 +148,7 @@ describe('parsePrs', () => {
         },
         // u1 is also in "reviewed": the requested row wins
         reviewed: { nodes: [pr('u1'), pr('u3')] },
+        mine: { nodes: [pr('u4', { isDraft: true, author: { login: 'me' } })] },
       },
       'me',
     );
@@ -148,7 +156,9 @@ describe('parsePrs', () => {
       ['u1', 'me'],
       ['u2', 'team'],
       ['u3', null],
+      ['u4', null],
     ]);
+    expect(rows[3]).toMatchObject({ author: 'me', isDraft: true });
     // bob: a later COMMENTED keeps the approval; ann approved before newer commits → not counted
     expect(rows[0]!.approvals).toBe(1);
     expect(rows[0]!.myReview).toMatchObject({ state: 'CHANGES_REQUESTED', onHead: false });

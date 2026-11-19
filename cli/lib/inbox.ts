@@ -81,16 +81,18 @@ const PR_FIELDS = `
   }`;
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- untyped GraphQL response */
-export function inboxQuery(s: InboxSettings): { query: string; requested: string; reviewed: string } {
+export function inboxQuery(s: InboxSettings): { query: string; requested: string; reviewed: string; mine: string } {
   const scope = scopeQuery(s);
   const requested = `${scope} ${s.requested === 'me' ? 'user-review-requested:@me' : 'review-requested:@me'}`;
   const reviewed = `${scope} reviewed-by:@me -author:@me`;
+  // Your own PRs, drafts included: reviewed by you before you ask others.
+  const mine = `${scopeQuery({ ...s, includeDrafts: true })} author:@me`;
   const search = (alias: string, q: string) =>
     `${alias}: search(query: ${JSON.stringify(q)}, type: ISSUE, first: 50) { nodes { ${PR_FIELDS} } }`;
   const query = `query { viewer { login } ${search('requested', requested)} ${
     s.showReviewed ? search('reviewed', reviewed) : ''
-  } }`;
-  return { query, requested, reviewed };
+  } ${search('mine', mine)} }`;
+  return { query, requested, reviewed, mine };
 }
 
 /** Turn the GraphQL answer into inbox rows (without local state yet). */
@@ -100,6 +102,7 @@ export function parsePrs(data: any, viewer: string): Omit<InboxPr, 'runs' | 'tur
   const rows = [
     ...(data.requested?.nodes || []).map((n: any) => [n, true] as const),
     ...(data.reviewed?.nodes || []).map((n: any) => [n, false] as const),
+    ...(data.mine?.nodes || []).map((n: any) => [n, false] as const),
   ];
   for (const [n, requested] of rows) {
     if (!n?.url || out.has(n.url)) continue;

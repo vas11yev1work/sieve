@@ -93,6 +93,10 @@ Map: `[`/`]` — previous/next flow · `Esc` — deselect the step · `f` — fi
 
 The current tab, flow and step live in the URL (`#review`, `#map/<flow>/<step>`), so reloads and links keep your place.
 
+### Simple view
+
+A local run, or a review of a PR you wrote yourself (the `gh` user is its author), opens in the **simple view**: only the findings that passed validation, each with its number, severity, file and explanation — no chat, comments or suggested fix — and one **Copy all** button that copies them as Markdown. **Full view** in the header switches back to the usual review page.
+
 ## PR map
 
 <!-- screenshot: docs/map.png -->
@@ -122,6 +126,8 @@ When the map is built is set by `map.mode`:
 ```
 
 A page at `http://127.0.0.1:7438/inbox` (always the same port, `inbox.port`) with every open PR that requests your review, across all repos your `gh` token can see — with what GitHub says about it and what Sieve has done with it. Start a review with one click; it runs in the background and the page shows how far it got.
+
+Two tabs in the header: **To review** (the groups below) and **My PRs** — your own open PRs, drafts included, newest first, with the same Review button; their runs open in the [simple view](#simple-view).
 
 PRs are grouped by whose move it is:
 

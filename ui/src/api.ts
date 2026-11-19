@@ -28,6 +28,8 @@ export interface RunData {
     isDraft?: boolean;
     state?: string;
     changedFiles: number;
+    /** A local run or your own PR: opens in the simple view. */
+    own: boolean;
   };
   settings: { reportLanguage: string; commentLanguage: string; mapMode: Settings['map']['mode'] };
   findings: Finding[];

@@ -10,6 +10,7 @@ import Markdown from './components/Markdown.vue';
 import LanguagePicker from './components/LanguagePicker.vue';
 import PanelTabs from './components/PanelTabs.vue';
 import VerdictList from './components/VerdictList.vue';
+import SimpleView from './components/SimpleView.vue';
 import { mapStore, mapEnabled, prMap, loadMap, moveFlow, selectFlow, showNode } from './map';
 import {
   GitBranch,
@@ -132,7 +133,7 @@ function onKey(e: KeyboardEvent) {
   const el = e.target as HTMLElement;
   if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.isContentEditable))
     return;
-  if (e.metaKey || e.ctrlKey || e.altKey || publishing.value) return;
+  if (e.metaKey || e.ctrlKey || e.altKey || publishing.value || store.simple) return;
   if (store.view === 'map') return mapStore.tab === 'graph' ? onMapKey(e) : undefined;
   if (e.code === 'KeyJ' || e.key === 'ArrowDown') {
     move(1);
@@ -216,7 +217,10 @@ onBeforeUnmount(() => {
           :save-label="t.saveDefault"
           @apply="setLanguages"
         />
-        <button class="primary" @click="publishing = true">
+        <button class="ghost" @click="store.simple = !store.simple">
+          {{ store.simple ? t.fullView : t.simpleView }}
+        </button>
+        <button v-if="!store.simple" class="primary" @click="publishing = true">
           <Send v-if="store.run.meta.mode === 'pr'" :size="14" /><Copy v-else :size="14" />
           {{ store.run.meta.mode === 'pr' ? t.publish : t.export }}
           <span v-if="ready" class="count">{{ ready }}</span>
@@ -225,7 +229,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <nav v-if="store.view === 'review'" class="tabs">
+    <nav v-if="store.view === 'review' && !store.simple" class="tabs">
       <button
         v-for="tb in tabs"
         :key="tb.id"
@@ -253,7 +257,8 @@ onBeforeUnmount(() => {
       <span class="muted shortcuts"><Keyboard :size="13" /> {{ t.shortcuts }}</span>
     </nav>
 
-    <main v-if="store.view === 'review'" class="grid">
+    <SimpleView v-if="store.view === 'review' && store.simple" />
+    <main v-else-if="store.view === 'review'" class="grid">
       <aside class="col list-col">
         <PanelTabs v-model="listTab" :tabs="listTabs" />
         <FindingList v-if="listTab === 'findings'" />
