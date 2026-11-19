@@ -108,7 +108,7 @@ export const inboxApi = {
   cancel: (url: string) => post<InboxJob>('/api/inbox/cancel', { url }),
   dismiss: (url: string) => post<{ ok: boolean }>('/api/inbox/dismiss', { url }),
   snooze: (url: string) => post<{ ok: boolean }>('/api/inbox/snooze', { url }),
-  unsnooze: (url?: string) => post<{ ok: boolean }>('/api/inbox/unsnooze', { url }),
+  unsnooze: (url: string) => post<{ ok: boolean }>('/api/inbox/unsnooze', { url }),
   open: (runDir: string) => post<{ url: string }>('/api/inbox/open', { runDir }),
   settings: (body: { reportLanguage?: string; commentLanguage?: string; persist?: boolean }) =>
     fetch('/api/inbox/settings', {

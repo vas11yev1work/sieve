@@ -59,7 +59,14 @@ export async function inboxData(
     all.push({ ...p, checkout: checkoutOf(s.inbox, p.owner, p.repo), runs, job, ...turn });
   }
   const state = loadInboxState();
-  const { shown: prs, snoozed, expired } = applyInboxState(all, state);
+  const { shown, snoozed, expired } = applyInboxState(all, state);
+  // Snoozed PRs are a group of their own, at the end.
+  const prs = [
+    ...shown,
+    ...all
+      .filter((p) => snoozed.includes(p.url))
+      .map((p) => ({ ...p, turn: 'snoozed' as const, why: 'snoozed' as const })),
+  ];
   if (expired.length) {
     for (const url of expired) delete state.snoozed[url];
     saveInboxState(state);
@@ -73,7 +80,6 @@ export async function inboxData(
     reportLanguage: s.reportLanguage,
     commentLanguage: s.commentLanguage,
     prs,
-    snoozed,
   };
 }
 
@@ -183,7 +189,6 @@ export function createInboxApp(o: InboxServerOptions) {
         reportLanguage: s.reportLanguage,
         commentLanguage: s.commentLanguage,
         prs: [],
-        snoozed: [],
       } as InboxData;
     // ponytail: GitHub is asked at most once a minute unless the user refreshes; polling reads the cache
     if (refresh || !gh || Date.now() - gh.at > 60_000) {
@@ -342,12 +347,11 @@ export function createInboxApp(o: InboxServerOptions) {
     return c.json({ ok: true });
   });
 
-  /** `url` brings back one PR; without it, every snoozed PR. */
+  /** Bring back one snoozed PR. */
   app.post('/api/inbox/unsnooze', async (c) => {
-    const { url } = await c.req.json<{ url?: string }>();
+    const { url } = await c.req.json<{ url: string }>();
     const st = loadInboxState();
-    if (url) delete st.snoozed[url];
-    else st.snoozed = {};
+    delete st.snoozed[url];
     saveInboxState(st);
     return c.json({ ok: true });
   });

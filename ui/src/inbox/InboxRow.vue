@@ -15,6 +15,7 @@ import {
   Info,
   ChevronDown,
   Clock,
+  Undo2,
 } from 'lucide-vue-next';
 import type { InboxPr, InboxRun, RunUsage } from '../../../shared/types';
 import { SEVERITIES } from '../../../shared/types';
@@ -32,6 +33,7 @@ const emit = defineEmits<{
   open: [runDir: string];
   toggle: [];
   snooze: [];
+  unsnooze: [];
 }>();
 
 const i = computed(() => t.value.inbox);
@@ -187,7 +189,8 @@ function summary(r: InboxRun) {
       <div class="more-head">
         <h3>{{ i.history }}</h3>
         <button v-if="cur && !active" :title="where" @click="emit('review')">{{ i.reviewAgain }}</button>
-        <button :title="i.snoozeHint" @click="emit('snooze')"><Clock :size="14" />{{ i.snooze }}</button>
+        <button v-if="pr.turn === 'snoozed'" @click="emit('unsnooze')"><Undo2 :size="14" />{{ i.unsnooze }}</button>
+        <button v-else :title="i.snoozeHint" @click="emit('snooze')"><Clock :size="14" />{{ i.snooze }}</button>
       </div>
       <ol v-if="pr.runs.length" class="runs">
         <li v-for="r in pr.runs" :key="r.runDir">

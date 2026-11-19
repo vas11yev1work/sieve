@@ -19,6 +19,7 @@ import { Check, MessageSquareText, LoaderCircle, Inbox } from 'lucide-vue-next';
       @click="store.selected = f.id"
     >
       <div class="top">
+        <span class="num mono">{{ f.id.toUpperCase() }}</span>
         <span class="sev" :class="f.severity">{{ f.severity }}</span>
         <span class="chip">{{ f.category }}</span>
         <span class="grow" />
@@ -69,6 +70,11 @@ import { Check, MessageSquareText, LoaderCircle, Inbox } from 'lucide-vue-next';
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .item.done .title {
+  color: var(--muted);
+}
+.num {
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--muted);
 }
 .top {

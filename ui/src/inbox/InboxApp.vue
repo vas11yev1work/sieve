@@ -22,7 +22,7 @@ const stopped = ref(false);
 /** PR whose "Review" was clicked: the reviewer picker is open for it. */
 const picking = ref<InboxPr | null>(null);
 
-const ORDER: InboxTurn[] = ['me', 'sieve', 'author', 'others', 'done'];
+const ORDER: InboxTurn[] = ['me', 'sieve', 'author', 'others', 'done', 'snoozed'];
 
 /** A view setting kept in this browser; storage can be blocked, then it just isn't kept. */
 function stored<T>(key: string, fallback: T): Ref<T> {
@@ -45,7 +45,7 @@ function stored<T>(key: string, fallback: T): Ref<T> {
 /** Repos to show, "owner/repo"; empty = all. */
 const repos = stored<string[]>('sieve.inbox.repos', []);
 /** Groups folded to their heading; each is toggled on its own. */
-const hidden = stored<InboxTurn[]>('sieve.inbox.hidden', ['others', 'done']);
+const hidden = stored<InboxTurn[]>('sieve.inbox.hidden', ['others', 'done', 'snoozed']);
 const toggleGroup = (id: InboxTurn) =>
   (hidden.value = hidden.value.includes(id) ? hidden.value.filter((x) => x !== id) : [...hidden.value, id]);
 /** The one row whose details are open. */
@@ -151,7 +151,7 @@ function undo() {
   clearTimeout(toastTimer);
   u?.();
 }
-const unsnoozeAll = () => call(() => inboxApi.unsnooze());
+const unsnooze = (p: InboxPr) => call(() => inboxApi.unsnooze(p.url));
 
 async function setLanguages(body: { reportLanguage: string; commentLanguage: string; persist: boolean }) {
   try {
@@ -316,19 +316,16 @@ const counts = computed(() => Object.fromEntries(groups.value.map((g) => [g.id, 
               @open="(dir) => open(p, dir)"
               @toggle="expanded = expanded === p.url ? '' : p.url"
               @snooze="snooze(p)"
+              @unsnooze="unsnooze(p)"
             />
           </div>
         </section>
 
-        <p v-if="otherRepos || data?.snoozed.length" class="not-shown muted">
+        <p v-if="otherRepos" class="not-shown muted">
           <span>{{ t.inbox.notShown }}</span>
           <span v-if="otherRepos">
             {{ t.inbox.otherRepos(otherRepos) }}
             <button class="ghost" @click="repos = []">{{ t.inbox.showAll }}</button>
-          </span>
-          <span v-if="data?.snoozed.length">
-            {{ t.inbox.snoozedN(data.snoozed.length) }}
-            <button class="ghost" @click="unsnoozeAll">{{ t.inbox.restore }}</button>
           </span>
         </p>
       </template>
@@ -517,6 +514,9 @@ h1 {
 }
 .b-done {
   --dot: var(--ok);
+}
+.b-snoozed {
+  --dot: var(--muted);
 }
 .ghead {
   display: flex;

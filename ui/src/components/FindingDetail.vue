@@ -55,6 +55,7 @@ const refs = computed(() => findingRefs.value.get(props.finding.id) || []);
 <template>
   <div class="detail scroll">
     <div class="meta">
+      <span class="num mono">{{ finding.id.toUpperCase() }}</span>
       <span class="sev" :class="finding.severity">{{ finding.severity }}</span>
       <span class="chip"><Tag :size="12" /> {{ finding.category }}</span>
       <span v-if="finding.reviewers.length" class="chip" :title="t.reviewers">
@@ -124,6 +125,11 @@ const refs = computed(() => findingRefs.value.get(props.finding.id) || []);
 .detail {
   padding: 20px 24px 32px;
   height: 100%;
+}
+.num {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
 }
 .meta {
   display: flex;

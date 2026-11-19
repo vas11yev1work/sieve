@@ -138,11 +138,11 @@ Each row shows:
 - **The PR** — repo, number, labels, title, author, size (S/M/L/XL by changed lines), how long it has waited for you or for the author, and why it is in its group.
 - **GitHub** — review decision, your last review (orange when new commits came after it), CI, unresolved threads, merge conflicts, the team you were requested through.
 - **Sieve** — a dot per run (filled: on the current commit, ring: on an older one, coloured by the worst finding) and what is left on the current commit: to go through, ready to publish, published, map built. While a review runs: a progress ring, what it is doing ("Reviewers 2 of 4", "Checked 6 of 14 findings") and the elapsed time.
-- **Action** — Review / Open / Retry / Cancel, and **Details**: every run with its commit, findings and how far it was gone through, **Review again**, and **Snooze** — the PR leaves the page until its next commit (kept in `~/.sieve/inbox-state.json`).
+- **Action** — Review / Open / Retry / Cancel, and **Details**: every run with its commit, findings and how far it was gone through, **Review again**, and **Snooze** — the PR moves to the **Snoozed** group at the end until its next commit (kept in `~/.sieve/inbox-state.json`); there **Bring back** returns it.
 
 Runs started from the inbox also show how long they took, their tokens and the API-price cost, and open into the time of each stage and a table of tokens and time per process: the orchestrator, each reviewer (its parts added up), the map, the validators together. It is saved as `usage.json` in the run folder; runs started from Claude Code have none.
 
-Above the list: a search and a repository filter, kept in the browser. Each group has its own **Hide** / **Show** (also kept; Approved by others and Done start hidden), and the tabs under the header jump to a group. Below it: how many PRs the repository filter and snoozes leave out, with a link to bring them back.
+Above the list: a search and a repository filter, kept in the browser. Each group has its own **Hide** / **Show** (also kept; Approved by others, Done and Snoozed start hidden), and the tabs under the header jump to a group. Below it: how many PRs the repository filter leaves out, with a link to show all.
 
 The header has **Stop** (stops the inbox server, cancelling running and queued reviews) and the same language button as the review page; there "save as default" writes `~/.sieve/settings.json`, since the inbox spans projects.
 
@@ -309,7 +309,7 @@ bun run dev:ui                # Vite dev server, proxies /api to :4545 (or $SIEV
 
 Try the plugin without installing: `claude --plugin-dir /path/to/sieve`, then `/sieve:review`.
 
-Server API (used by the UI): `GET /api/run`, `PATCH /api/findings/:id`, `POST /api/findings/:id/{chat,comment,reset}` (SSE for chat/comment), `GET /api/findings/:id/context`, `GET /api/code?file=&line=&endLine=`, `GET /api/map`, `POST /api/map/build` (SSE), `GET /api/map/progress` (SSE), `POST /api/map/cancel`, `POST /api/map/nodes/:flowId/:nodeId/{chat,reset}`, `GET /api/publish/preview`, `POST /api/publish`, `GET /api/export`. Inbox server: `GET /api/inbox[?refresh=1]`, `POST /api/inbox/{review,cancel,dismiss,snooze}` (`{ url }`), `POST /api/inbox/unsnooze` (`{ url? }`), `POST /api/inbox/open` (`{ runDir }`), `PUT /api/inbox/settings`, `POST /api/inbox/shutdown`, `GET /api/inbox/ping`.
+Server API (used by the UI): `GET /api/run`, `PATCH /api/findings/:id`, `POST /api/findings/:id/{chat,comment,reset}` (SSE for chat/comment), `GET /api/findings/:id/context`, `GET /api/code?file=&line=&endLine=`, `GET /api/map`, `POST /api/map/build` (SSE), `GET /api/map/progress` (SSE), `POST /api/map/cancel`, `POST /api/map/nodes/:flowId/:nodeId/{chat,reset}`, `GET /api/publish/preview`, `POST /api/publish`, `GET /api/export`. Inbox server: `GET /api/inbox[?refresh=1]`, `POST /api/inbox/{review,cancel,dismiss,snooze}` (`{ url }`), `POST /api/inbox/unsnooze` (`{ url }`), `POST /api/inbox/open` (`{ runDir }`), `PUT /api/inbox/settings`, `POST /api/inbox/shutdown`, `GET /api/inbox/ping`.
 
 ```
 .claude-plugin/        plugin + marketplace manifests

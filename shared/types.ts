@@ -199,10 +199,11 @@ export interface InboxSettings {
 
 /** Whose turn it is: Sieve is reviewing, yours, the author's, or nothing left (approved). */
 /** `others`: your review is still asked for, but someone else already approved. */
-export type InboxTurn = 'sieve' | 'me' | 'others' | 'author' | 'done';
+export type InboxTurn = 'sieve' | 'me' | 'others' | 'author' | 'done' | 'snoozed';
 
 /** Why a PR is in its group; the page turns it into the reason line. */
 export type InboxWhy =
+  | 'snoozed'
   | 'job'
   | 'findings'
   | 'requested'
@@ -327,8 +328,6 @@ export interface InboxData {
   reportLanguage: string;
   commentLanguage: string;
   prs: InboxPr[];
-  /** URLs snoozed until new commits. */
-  snoozed: string[];
 }
 
 export interface ParsedDiffLine {
